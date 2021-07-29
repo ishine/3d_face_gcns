@@ -1,0 +1,6 @@
+__pycache__
+data/
+log/
+runs/
+weights/
+vendor/ATVGnet/model/
