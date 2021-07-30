@@ -4,3 +4,5 @@ log/
 runs/
 weights/
 vendor/ATVGnet/model/
+audiodvp_utils/face_detection/detection/sfd/
+facegcn_test.ipynb

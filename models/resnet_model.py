@@ -18,6 +18,8 @@ class ResnetModel:
         self.epoch_tex = 5
         self.epoch_warm_up = 10
         self.epoch_train = opt.num_epoch
+        self.pass_epoch_tex = False
+        self.pass_epoch_warm = False
 
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
@@ -127,12 +129,18 @@ class ResnetModel:
         self.loss.backward(retain_graph=True)
 
     def optimize_parameters(self, epoch):
-        if epoch >= self.epoch_tex and epoch < self.epoch_warm_up:
+        if epoch == self.epoch_tex and (not self.pass_epoch_tex):
             self.set_requires_grad(self.net.fc, False)
             self.set_requires_grad(self.net.pretrained_model, False)
-        else:
+            self.net.fc.eval()
+            self.net.pretrained_model.eval()
+            self.pass_epoch_tex = True
+        elif epoch == self.epoch_warm_up and (not self.pass_epoch_warm):
             self.set_requires_grad(self.net.fc, True)
             self.set_requires_grad(self.net.pretrained_model, True)
+            self.net.fc.train()
+            self.net.pretrained_model.train()
+            self.pass_epoch_warm = True
             
         self.forward(epoch)
 
@@ -198,6 +206,4 @@ class ResnetModel:
         for net in nets:
             if net is not None:
                 for param in net.parameters():
-                    if param.requires_grad == requires_grad:
-                        break
                     param.requires_grad = requires_grad
