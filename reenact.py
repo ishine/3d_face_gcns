@@ -6,7 +6,7 @@ from torchvision import utils
 import numpy as np
 from renderer.face_model import FaceModel
 from options.options import Options
-from audiodvp_utils.util import create_dir, load_coef, load_face_emb, get_file_list
+from audiodvp_utils.util import create_dir, load_coef, load_face_emb, get_file_list, get_max_crop_region
 from audiodvp_utils.rescale_image import rescale_and_paste
 
 if __name__ == '__main__':
@@ -29,6 +29,8 @@ if __name__ == '__main__':
     face_emb_list = load_face_emb(opt.data_dir)
     face_model = FaceModel(opt=opt, batch_size=1, load_model=True)
 
+    top, bottom, left, right = get_max_crop_region(crop_region_list)
+
     for i in tqdm(range(min(len(delta_list), len(alpha_list)))):
         alpha = alpha_list[i + opt.offset].unsqueeze(0).cuda()
         beta = beta_list[i + opt.offset].unsqueeze(0).cuda()
@@ -41,11 +43,13 @@ if __name__ == '__main__':
         full_image = cv2.imread(full_image_list[i])
         H, W, _ = full_image.shape
         empty_image = np.zeros((H, W, 3), np.uint8)
-        render, _, _, _, _ = face_model(alpha, delta, beta, rotation, translation, gamma, face_emb, lower=False)
+        render, _, _, _, _ = face_model(alpha, delta, beta, rotation, translation, gamma, face_emb, lower=True)
         render = render.squeeze().mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
         
         rescaled_render = rescale_and_paste(crop_region, empty_image, render)
         rescaled_render = cv2.cvtColor(rescaled_render, cv2.COLOR_RGB2BGR)
+        rescaled_render = rescaled_render[top:bottom, left:right]
+        rescaled_render = cv2.resize(rescaled_render, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
         cv2.imwrite(os.path.join(opt.src_dir, 'reenact', os.path.basename(full_image_list[i])), rescaled_render)
 
         if i >= opt.test_num:

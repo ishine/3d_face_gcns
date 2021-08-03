@@ -12,7 +12,8 @@ sys.path.append(".")
 
 from models import networks
 from options.options import Options
-from audiodvp_utils.util import create_dir, load_coef, get_file_list, load_face_emb
+from audiodvp_utils.util import create_dir, load_coef, get_file_list, load_face_emb, get_max_crop_region
+from audiodvp_utils.rescale_image import rescale_and_paste
 
 
 if __name__ == '__main__':
@@ -28,6 +29,11 @@ if __name__ == '__main__':
     translation_list = load_coef(os.path.join(opt.data_dir, 'translation'))
     face_emb_list = load_face_emb(opt.data_dir)
 
+    crop_region_list = load_coef(os.path.join(opt.data_dir, 'crop_region'))
+    full_image_list = get_file_list(os.path.join(opt.data_dir, 'full'))
+    
+    top, bottom, left, right = get_max_crop_region(crop_region_list)
+    H, W, _ = cv2.imread(full_image_list[0]).shape
     mouth_mask = networks.MouthMask(opt).to(opt.device)
 
     for i in tqdm(range(len(alpha_list))):
@@ -38,27 +44,41 @@ if __name__ == '__main__':
         rotation = angle_list[i].unsqueeze(0).cuda()
         translation = translation_list[i].unsqueeze(0).cuda()
         face_emb = face_emb_list[i].unsqueeze(0).cuda()
+        crop_region = crop_region_list[i]
+        empty_image = np.zeros((H, W), np.uint8)
 
         mask = mouth_mask(alpha, delta, beta, gamma, rotation, translation, face_emb)
         mask = mask.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.0
         mask = cv2.dilate(mask, np.ones((3,3), np.uint8), iterations=4)
-
-        cv2.imwrite(os.path.join(opt.data_dir, 'mask', '%05d.png' % (i+1)), mask)
+        rescaled_mask = rescale_and_paste(crop_region, empty_image, mask)
+        rescaled_mask = rescaled_mask[top:bottom, left:right]
+        rescaled_mask = cv2.resize(rescaled_mask, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
+        
+        cv2.imwrite(os.path.join(opt.data_dir, 'mask', '%05d.png' % (i+1)), rescaled_mask)
 
     create_dir(os.path.join(opt.data_dir, 'nfr', 'A', 'train'))
     create_dir(os.path.join(opt.data_dir, 'nfr', 'B', 'train'))
 
     masks = get_file_list(os.path.join(opt.data_dir, 'mask'))
-    crops = get_file_list(os.path.join(opt.data_dir, 'crop'))
     renders = get_file_list(os.path.join(opt.data_dir, 'render'))
 
     for i in tqdm(range(len(masks))):
         mask = cv2.imread(masks[i])
-        crop = cv2.imread(crops[i])
         render = cv2.imread(renders[i])
+        full = cv2.imread(full_image_list[i])
+        crop_region = crop_region_list[i]
 
-        masked_crop = cv2.bitwise_and(crop, mask)
-        masked_render = cv2.bitwise_and(render, mask)
+        empty_image = np.zeros((H, W, 3), np.uint8)
+
+        rescaled_render = rescale_and_paste(crop_region, empty_image, render)
+        rescaled_render = rescaled_render[top:bottom, left:right]
+        rescaled_render = cv2.resize(rescaled_render, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
+        
+        rescaled_crop = full[top:bottom, left:right]
+        rescaled_crop = cv2.resize(rescaled_crop, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
+        
+        masked_crop = cv2.bitwise_and(rescaled_crop, mask)
+        masked_render = cv2.bitwise_and(rescaled_render, mask)
 
         cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'A', 'train', '%05d.png' % (i+1)), masked_crop)
         cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'B', 'train', '%05d.png' % (i+1)), masked_render)

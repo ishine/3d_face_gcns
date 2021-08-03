@@ -15,8 +15,8 @@ class ResnetModel:
         self.device = opt.device
         self.isTrain = opt.isTrain
 
-        self.epoch_tex = 5
-        self.epoch_warm_up = 10
+        self.epoch_tex = opt.epoch_tex
+        self.epoch_warm_up = opt.epoch_warm_up
         self.epoch_train = opt.num_epoch
         self.pass_epoch_tex = False
         self.pass_epoch_warm = False

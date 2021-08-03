@@ -13,7 +13,9 @@ class Options:
         self.parser.add_argument('--face_id_path', type=str, default='renderer/data/select_vertex_id.mat')
 
         self.parser.add_argument('--num_epoch', type=int, default=100)
-        self.parser.add_argument('--batch_size', type=int, default=5)
+        self.parser.add_argument('--epoch_tex', type=int, default=10)
+        self.parser.add_argument('--epoch_warm_up', type=int, default=15)
+        self.parser.add_argument('--batch_size', type=int, default=10)
         self.parser.add_argument('--Nw', type=int, default=7)
         self.parser.add_argument('--serial_batches', type=self.str2bool, default=True)
         self.parser.add_argument('--num_workers', type=int, default=4)

@@ -4,6 +4,7 @@ from tqdm import tqdm
 import cv2
 from skimage import io
 import torch
+import numpy as np
 import face_alignment
 from facenet_pytorch import InceptionResnetV1
 from PIL import Image
@@ -128,3 +129,21 @@ def load_face_emb(data_dir):
         face_emb_dict = pickle.load(f)
     face_emb_list = list(face_emb_dict.values())
     return face_emb_list
+
+def get_max_crop_region(crop_region_list):
+    top, bottom, left, right = np.inf, 0, np.inf, 0
+
+    for t, b, l, r in crop_region_list:
+        if top > t:
+            top = t
+
+        if bottom < b:
+            bottom = b
+        
+        if left > l:
+            left = l
+        
+        if right < r:
+            right = r
+    
+    return top, bottom, left, right

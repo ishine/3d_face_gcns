@@ -71,7 +71,7 @@ def crop_per_image(data_dir, dest_size, crop_level):
     fa = face_detection.FaceAlignment(face_detection.LandmarksType._2D, flip_input=False, device='cuda')
 
     image_list = util.get_file_list(os.path.join(data_dir, 'full'))
-    batch_size = 32
+    batch_size = 8
     frames = []
 
     for i in tqdm(range(len(image_list))):
