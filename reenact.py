@@ -16,8 +16,8 @@ if __name__ == '__main__':
 
     alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
     beta_list = load_coef(os.path.join(opt.tgt_dir, 'beta'))
-#    delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_delta'))
-    delta_list = load_coef(os.path.join(opt.src_dir, 'delta'))
+    delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_delta'))
+    # delta_list = load_coef(os.path.join(opt.src_dir, 'delta'))
     gamma_list = load_coef(os.path.join(opt.tgt_dir, 'gamma'))
     angle_list = load_coef(os.path.join(opt.tgt_dir, 'rotation'))
     translation_list = load_coef(os.path.join(opt.tgt_dir, 'translation'))

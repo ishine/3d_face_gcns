@@ -8,7 +8,7 @@ import argparse
 from torch import full
 from tqdm import tqdm
 import numpy as np
-from util import load_coef, create_dir, get_file_list
+from .util import load_coef, create_dir, get_file_list
 
 # Resacle overlay and render images. Paste it on full image.
 def rescale_and_paste(crop_region, full_image, target_image):
