@@ -52,6 +52,19 @@ class Options:
         self.parser.add_argument('--gt_pose', type=self.str2bool, default=False)
         self.parser.add_argument('--offset', type=int, default=0)
 
+        # sycnet training parameters
+        self.parser.add_argument('--fps', type=int, default=25)
+        self.parser.add_argument('--sample_rate', type=int, default=16000)
+        self.parser.add_argument('--save_optimizer_state', type=bool, default=True)
+        self.parser.add_argument('--syncnet_batch_size', type=int, default=32)
+        self.parser.add_argument('--syncnet_num_workers', type=int, default=2)
+        self.parser.add_argument('--syncnet_lr', type=float, default=1e-4)
+        self.parser.add_argument('--syncnet_eval_interval', type=int, default=100000)
+        self.parser.add_argument('--syncnet_checkpoint_interval', type=int, default=1000)
+        self.parser.add_argument('--nepochs', type=int, default=100)
+        self.parser.add_argument('--syncnet_T', type=int, default=5)
+        self.parser.add_argument('--syncnet_mel_step_size', type=int, default=16)
+
     def parse_args(self):
         self.args = self.parser.parse_args()
         self.args.device = torch.device('cuda:{}'.format(self.args.gpu_ids[0])) if self.args.gpu_ids else torch.device('cpu')

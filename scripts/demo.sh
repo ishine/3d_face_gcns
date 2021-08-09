@@ -67,18 +67,22 @@ end_time="240"
 #     --n_epochs_decay 0 --load_size 256
 
 
+python train_syncnet.py \
+    --data_dir $target_dir
+
+
 # # # train audio2expression network
-python train_exp.py \
-    --dataset_mode audio_expression \
-    --num_epoch 10 \
-    --serial_batches False \
-    --display_freq 800 \
-    --print_freq 800 \
-    --batch_size 5 \
-    --lr 1e-3 \
-    --lambda_delta 1.0 \
-    --data_dir $target_dir \
-    --net_dir $target_dir
+# python train_exp.py \
+#     --dataset_mode audio_expression \
+#     --num_epoch 100 \
+#     --serial_batches False \
+#     --display_freq 800 \
+#     --print_freq 800 \
+#     --batch_size 5 \
+#     --lr 1e-3 \
+#     --lambda_delta 1.0 \
+#     --data_dir $target_dir \
+#     --net_dir $target_dir
 
 
 # predict expression parameter from audio feature
@@ -87,7 +91,7 @@ python train_exp.py \
 #     --net_dir $target_dir
 
 
-# python reenact.py --src_dir $source_dir --tgt_dir $target_dir
+# python reenact.py --src_dir $target_dir --tgt_dir $target_dir
 
 
 # choose best epoch with lowest loss

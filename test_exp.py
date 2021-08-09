@@ -4,7 +4,7 @@ from tqdm import tqdm
 from options.options import Options
 from datasets import create_dataset
 from models import audio_expression_model
-from utils.util import create_dir
+from audiodvp_utils.util import create_dir
 
 
 if __name__ == '__main__':
