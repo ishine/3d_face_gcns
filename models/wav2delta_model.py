@@ -1,74 +1,111 @@
 import torch
 from torch import nn
-from conv import Conv2d
-
-
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Linear') != -1:
-        torch.nn.init.xavier_normal_(m.weight, gain=torch.nn.init.calculate_gain('relu'))
-        torch.nn.init.zeros_(m.bias)
-
+from collections import OrderedDict
+import os
+from . import networks
+from .syncnet import SyncNet
 
 class Wav2DeltaModel(nn.Module):
-    def __init__(self, output_dim=64):
+    def __init__(self, opt):
         super(Wav2DeltaModel, self).__init__()
-        self.audio_encoder = nn.Sequential(
-            Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
-            Conv2d(32, 32, kernel_size=3, stride=1, padding=1, residual=True),
-            Conv2d(32, 32, kernel_size=3, stride=1, padding=1, residual=True),
+        self.opt = opt
+        self.device = opt.device
+        self.isTrain = opt.isTrain
 
-            Conv2d(32, 64, kernel_size=3, stride=(3, 1), padding=1),
-            Conv2d(64, 64, kernel_size=3, stride=1, padding=1, residual=True),
-            Conv2d(64, 64, kernel_size=3, stride=1, padding=1, residual=True),
+        self.loss_names = ['Delta', 'Sync']
+        self.visual_names = []
 
-            Conv2d(64, 128, kernel_size=3, stride=3, padding=1),
-            Conv2d(128, 128, kernel_size=3, stride=1, padding=1, residual=True),
-            Conv2d(128, 128, kernel_size=3, stride=1, padding=1, residual=True),
+        self.net = networks.Wav2Delta().to(self.device)
+        self.syncnet = SyncNet(opt)
+        pretrained_dir = os.path.join(opt.data_dir, 'syncnet_ckpt')
+        self.load_syncnet(pretrained_dir)
+        self.syncnet.to(self.device)
 
-            Conv2d(128, 256, kernel_size=3, stride=(3, 2), padding=1),
-            Conv2d(256, 256, kernel_size=3, stride=1, padding=1, residual=True),
+        if self.isTrain:
+            self.criterionDelta = nn.MSELoss()
+            self.criterionSync = networks.SyncLoss(opt.device)
 
-            Conv2d(256, 512, kernel_size=3, stride=1, padding=0),
-            Conv2d(512, 512, kernel_size=1, stride=1, padding=0),)
-            
-        self.fc = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, output_dim)
-        )
+            self.optimizer = torch.optim.Adam(self.net.fc.parameters(), lr=opt.lr, betas=(0.5, 0.999))
 
-        pretrained_audio_encoder_path = "models/wav2delta_pretrained.pth"
-        self.init_weights(pretrained_audio_encoder_path)
+    def load_syncnet(self, pretrained_dir):
+        ckpt_list = sorted(os.listdir(pretrained_dir))
+        pretrained_path = os.path.join(pretrained_dir, ckpt_list[-1])
 
-    
-    def init_weights(self, pretrained_model_path):
-        ckpt = torch.load(pretrained_model_path, map_location='cpu')
+        ckpt = torch.load(pretrained_path, map_location='cpu')["state_dict"]
+        self.syncnet.load_state_dict(ckpt)
 
-        own_state = self.state_dict()
-        pretrained_dict = {k: v for k, v in ckpt.items() if k in own_state}
-        own_state.update(pretrained_dict)
-
-        self.load_state_dict(own_state)
-
-        for p in self.audio_encoder.parameters():
+        for p in self.syncnet.parameters():
             p.requires_grad = False
 
-        self.fc.apply(weights_init)
+
+    def set_input(self, input):
+        if self.opt.isTrain:
+            self.indiv_mels = input['indiv_mels'].to(self.device)
+            self.delta_gt = input['delta_gt'].to(self.device)
+        else:
+            self.filename = input['filename']
+
+        self.mel = input['mel'].to(self.device)
+
+    def forward(self):
+        
+        self.delta = self.net(self.indiv_mels)
 
 
-    def forward(self, x):
-        # x = (B, T, 1, 80, 16)
-        B = x.size(0)
-        input_dim_size = len(x.size())
-        if input_dim_size > 4:
-            x = torch.cat([x[:, i] for i in range(x.size(1))], dim=0)
-        out = self.audio_encoder(x).flatten(start_dim=1)
-        out = self.fc(out)
+    def backward(self):
+        self.loss_Delta = self.criterionDelta(self.delta, self.delta_gt)
 
-        if input_dim_size > 4:
-            out = torch.split(out, B, dim=0)  # [(B, 64) * T]
-            out = torch.stack(out, dim=1)
-        return out
+        audio_emb, coef_emb = self.syncnet(self.mel, self.delta)
+        self.loss_Sync = self.criterionSync(audio_emb, coef_emb)
+
+        self.loss = self.opt.lambda_sync * self.loss_Sync + (1 - self.opt.lambda_sync) * self.loss_Delta
+
+        self.loss.backward()
+
+    def optimize_parameters(self):
+        self.forward()
+
+        self.optimizer.zero_grad()
+        self.backward()
+        self.optimizer.step()
+
+    def get_current_visuals(self):
+        """Return visualization images. train.py will display these images with visdom, and save the images to a HTML"""
+        visual_ret = OrderedDict()
+        for name in self.visual_names:
+            if isinstance(name, str):
+                visual_ret[name] = getattr(self, name)
+        return visual_ret
+
+    def get_current_losses(self):
+        """Return traning losses / errors. train.py will print out these errors on console, and save them to a file"""
+        errors_ret = OrderedDict()
+        for name in self.loss_names:
+            if isinstance(name, str):
+                errors_ret[name] = float(getattr(self, 'loss_' + name))  # float(...) works for both scalar tensor and float number
+        return errors_ret
+
+    def eval(self):
+        """Make models eval mode during test time"""
+        self.net.eval()
+
+    def test(self):
+        with torch.no_grad():
+            self.forward()
+
+    def save_delta(self):
+        torch.save(self.delta[0], os.path.join(self.opt.data_dir, 'reenact_delta', self.filename[0]))
+
+    def update_learning_rate(self):
+        self.scheduler.step()
+        lr = self.optimizer.param_groups[0]['lr']
+        print('learning rate = %.7f' % lr)
+
+    def save_network(self):
+        save_path = os.path.join(self.opt.net_dir, 'delta_net.pth')
+        torch.save(self.net.cpu().state_dict(), save_path)
+
+    def load_network(self):
+        load_path = os.path.join(self.opt.net_dir, 'delta_net.pth')
+        state_dict = torch.load(load_path, map_location=self.device)
+        self.net.load_state_dict(state_dict)

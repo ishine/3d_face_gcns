@@ -4,7 +4,7 @@ import torch.nn as nn
 from torchvision import transforms
 from audiodvp_utils import util
 from renderer.face_model import FaceModel
-from conv import Conv2d
+from .conv import Conv2d
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -242,7 +242,7 @@ class AdversarialLoss(nn.Module):
         return loss
 
 class VarianceLoss(nn.Module):
-    def __inint__(self):
+    def __init__(self):
         super(VarianceLoss, self).__init__()
 
     def forward(self, tex, skin_index):
@@ -252,6 +252,20 @@ class VarianceLoss(nn.Module):
             var_list.append(skin_tex[..., i].var(dim=1))
         
         loss = torch.cat(var_list).mean()
+
+        return loss
+
+
+class SyncLoss(nn.Module):
+    def __init__(self, device):
+        super(SyncLoss, self).__init__()
+        self.bce = nn.BCELoss()
+        self.device = device
+
+    def forward(self, audio_emb, coef_emb):
+        cosine_sim = nn.functional.cosine_similarity(audio_emb, coef_emb)
+        label = torch.ones(cosine_sim.size(0), 1).float().to(self.device)
+        loss = self.bce(cosine_sim.unsqueeze(1), label)
 
         return loss
 

@@ -1,17 +1,16 @@
 import time
 
 from options.options import Options
-from models import audio_expression_model
 from datasets import create_dataset
 from audiodvp_utils.visualizer import Visualizer
-from models.wav2delta import Wav2Delta
+from models import wav2delta_model
 
 if __name__ == '__main__':
     opt = Options().parse_args()   # get training options
 
     dataset = create_dataset(opt)
 
-    model = audio_expression_model.AudioExpressionModel(opt)
+    model = wav2delta_model.Wav2DeltaModel(opt)
 
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
 

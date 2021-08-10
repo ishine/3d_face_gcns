@@ -67,22 +67,21 @@ end_time="240"
 #     --n_epochs_decay 0 --load_size 256
 
 
-python train_syncnet.py \
-    --data_dir $target_dir
+# python train_syncnet.py \
+#     --data_dir $target_dir
 
 
-# # # train audio2expression network
-# python train_exp.py \
-#     --dataset_mode audio_expression \
-#     --num_epoch 100 \
-#     --serial_batches False \
-#     --display_freq 800 \
-#     --print_freq 800 \
-#     --batch_size 5 \
-#     --lr 1e-3 \
-#     --lambda_delta 1.0 \
-#     --data_dir $target_dir \
-#     --net_dir $target_dir
+# # # train audio2delta network
+python train_delta.py \
+    --dataset_mode audio_delta \
+    --num_epoch 100 \
+    --serial_batches False \
+    --display_freq 800 \
+    --print_freq 800 \
+    --batch_size 32 \
+    --lr 1e-3 \
+    --data_dir $target_dir \
+    --net_dir $target_dir
 
 
 # predict expression parameter from audio feature

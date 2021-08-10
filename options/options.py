@@ -37,6 +37,8 @@ class Options:
         self.parser.add_argument('--lambda_adv', type=float, default=0.001)
         self.parser.add_argument('--lambda_var', type=float, default=0.0)
 
+        self.parser.add_argument('--lambda_sync', type=float, default=0.0)
+
         self.parser.add_argument('--display_port', type=int, default=11111, help='tensorboard port of the web display')
         self.parser.add_argument('--display_freq', type=int, default=2000, help='frequency of showing training results on screen')
         self.parser.add_argument('--print_freq', type=int, default=200, help='frequency of showing training results on console')
@@ -60,8 +62,8 @@ class Options:
         self.parser.add_argument('--syncnet_num_workers', type=int, default=2)
         self.parser.add_argument('--syncnet_lr', type=float, default=1e-4)
         self.parser.add_argument('--syncnet_eval_interval', type=int, default=100000)
-        self.parser.add_argument('--syncnet_checkpoint_interval', type=int, default=1000)
-        self.parser.add_argument('--nepochs', type=int, default=100)
+        self.parser.add_argument('--syncnet_checkpoint_interval', type=int, default=10000)
+        self.parser.add_argument('--nepochs', type=int, default=500)
         self.parser.add_argument('--syncnet_T', type=int, default=5)
         self.parser.add_argument('--syncnet_mel_step_size', type=int, default=16)
 
