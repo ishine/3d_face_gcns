@@ -5,6 +5,12 @@ from torchvision import transforms
 from audiodvp_utils import util
 from renderer.face_model import FaceModel
 from .conv import Conv2d
+from renderer.mesh_refiner import ChebResBlock, ChebConv
+from lib.mesh_io import read_obj
+import os
+import utils
+import numpy as np
+import scipy.io as sio
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -315,8 +321,19 @@ def weights_init(m):
 
 
 class Wav2Delta(nn.Module):
-    def __init__(self, output_dim=64):
+    def __init__(self, opt, output_dim=64):
         super(Wav2Delta, self).__init__()
+        self.device = opt.device
+        self.trans_mat = self.get_trans_mat()
+
+        self.refer_mesh = read_obj(os.path.join('renderer', 'data', 'bfm09_face_template.obj'))
+        self.laplacians, self.downsamp_trans, self.upsamp_trans, self.pool_size = utils.init_sampling(
+        self.refer_mesh, os.path.join('renderer', 'data', 'params', 'bfm09_face'), 'bfm09_face')
+        self.laplacians = [(torch.FloatTensor(np.array(laplacian.todense())) - torch.diag(torch.ones(laplacian.shape[0]))).to_sparse().to(self.device) for laplacian in self.laplacians]
+        self.upsamp_trans = [torch.FloatTensor(np.array(upsamp_tran.todense())).to_sparse().to(self.device) for upsamp_tran in self.upsamp_trans]
+        self.decoderF = [32, 16, 16, 16, 3]
+        self.K = 6
+
         self.audio_encoder = nn.Sequential(
             Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
             Conv2d(32, 32, kernel_size=3, stride=1, padding=1, residual=True),
@@ -336,13 +353,15 @@ class Wav2Delta(nn.Module):
             Conv2d(256, 512, kernel_size=3, stride=1, padding=0),
             Conv2d(512, 512, kernel_size=1, stride=1, padding=0),)
             
-        self.fc = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, output_dim)
-        )
+        self.decoder_fc = nn.Linear(512, self.pool_size[-1] * self.decoderF[0], bias=True)
+        self.relu = nn.ReLU()
+
+        self.decoder_cheb_layers = nn.ModuleList([ChebResBlock(self.decoderF[0], self.decoderF[1], self.laplacians[-2], self.K),
+                                                ChebResBlock(self.decoderF[1], self.decoderF[2], self.laplacians[-3], self.K),
+                                                ChebResBlock(self.decoderF[2], self.decoderF[3], self.laplacians[-4], self.K),
+                                                ChebResBlock(self.decoderF[3], self.decoderF[4], self.laplacians[-5], self.K)])
+
+        self.last_cheb = ChebConv(3, 3, self.laplacians[0], self.K, is_last=True)
 
         pretrained_audio_encoder_path = "models/wav2delta_pretrained.pth"
         self.init_weights(pretrained_audio_encoder_path)
@@ -360,8 +379,30 @@ class Wav2Delta(nn.Module):
         for p in self.audio_encoder.parameters():
             p.requires_grad = False
 
-        self.fc.apply(weights_init)
+        nn.init.xavier_normal_(self.decoder_fc.weight, gain=nn.init.calculate_gain('relu'))
+        nn.init.zeros_(self.decoder_fc.bias)
 
+
+    def get_trans_mat(self):
+        mat_data = sio.loadmat('renderer/data/data.mat')
+        base = torch.from_numpy(mat_data['exp_base'])
+        baseT = base.T
+        m = baseT.matmul(base).inverse()
+        trans_mat = m.matmul(baseT).to(self.device)
+
+        return trans_mat
+
+    def poolwT(self, inputs, L):
+        Mp = L.shape[0]
+        B, M, Fin = inputs.shape
+        B, M, Fin = int(B), int(M), int(Fin)
+        x = inputs.permute(1, 0, 2)
+        x = torch.reshape(x, (M, B * Fin))
+        x = torch.mm(L, x)  # Mp, B*Fin
+        x = torch.reshape(x, (Mp, B, Fin))
+        x = x.permute(1, 0, 2)
+
+        return x
 
     def forward(self, x):
         # x = (B, T, 1, 80, 16)
@@ -370,7 +411,21 @@ class Wav2Delta(nn.Module):
         if input_dim_size > 4:
             x = torch.cat([x[:, i] for i in range(x.size(1))], dim=0)
         out = self.audio_encoder(x).flatten(start_dim=1)
-        out = self.fc(out)
+        
+        newB = out.shape[0]
+        layer1 = self.relu(self.decoder_fc(out))
+        layer1 = layer1.reshape(newB, self.pool_size[-1], self.decoderF[0])
+        layer2 = self.poolwT(layer1, self.upsamp_trans[-1])
+        layer2 = self.decoder_cheb_layers[0](layer2)
+        layer3 = self.poolwT(layer2, self.upsamp_trans[-2])
+        layer3 = self.decoder_cheb_layers[1](layer3)
+        layer4 = self.poolwT(layer3, self.upsamp_trans[-3])
+        layer4 = self.decoder_cheb_layers[2](layer4)
+        layer5 = self.poolwT(layer4, self.upsamp_trans[-4])
+        out = self.decoder_cheb_layers[3](layer5)
+        out = self.last_cheb(out)
+        out = out.reshape(newB, -1, 1)
+        out = self.trans_mat.matmul(out).squeeze()
 
         if input_dim_size > 4:
             out = torch.split(out, B, dim=0)  # [(B, 64) * T]
