@@ -15,17 +15,20 @@ class Wav2DeltaModel(nn.Module):
         self.loss_names = ['Delta', 'Sync']
         self.visual_names = []
 
-        self.net = networks.Wav2Delta().to(self.device)
+        self.net = networks.Wav2Delta(opt).to(self.device)
         self.syncnet = SyncNet(opt)
         pretrained_dir = os.path.join(opt.data_dir, 'syncnet_ckpt')
         self.load_syncnet(pretrained_dir)
         self.syncnet.to(self.device)
+        self.syncnet_epoch = opt.syncnet_epoch
 
         if self.isTrain:
             self.criterionDelta = nn.MSELoss()
             self.criterionSync = networks.SyncLoss(opt.device)
 
-            self.optimizer = torch.optim.Adam(self.net.fc.parameters(), lr=opt.lr, betas=(0.5, 0.999))
+            self.optimizer = torch.optim.Adam([{'params' : self.net.decoder_fc.parameters()}, 
+                                                {'params' : self.net.decoder_cheb_layers.parameters()},
+                                                {'params' : self.net.last_cheb.parameters()}], lr=opt.lr, betas=(0.5, 0.999))
 
     def load_syncnet(self, pretrained_dir):
         ckpt_list = sorted(os.listdir(pretrained_dir))
@@ -54,7 +57,6 @@ class Wav2DeltaModel(nn.Module):
 
     def backward(self):
         self.loss_Delta = self.criterionDelta(self.delta, self.delta_gt)
-
         audio_emb, coef_emb = self.syncnet(self.mel, self.delta)
         self.loss_Sync = self.criterionSync(audio_emb, coef_emb)
 
@@ -62,7 +64,9 @@ class Wav2DeltaModel(nn.Module):
 
         self.loss.backward()
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, epoch):
+        if epoch >= self.syncnet_epoch:
+            self.opt.lambda_sync = 0.9
         self.forward()
 
         self.optimizer.zero_grad()

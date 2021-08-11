@@ -78,14 +78,14 @@ python train_delta.py \
     --serial_batches False \
     --display_freq 800 \
     --print_freq 800 \
-    --batch_size 32 \
-    --lr 1e-3 \
+    --batch_size 16 \
+    --gpu_ids 2 \
     --data_dir $target_dir \
     --net_dir $target_dir
 
 
 # predict expression parameter from audio feature
-# python test_exp.py --dataset_mode audio_expression \
+# python test_delta.py --dataset_mode audio_delta \
 #     --data_dir $source_dir \
 #     --net_dir $target_dir
 
