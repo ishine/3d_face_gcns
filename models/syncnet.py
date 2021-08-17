@@ -27,9 +27,6 @@ class SyncNet(nn.Module):
         self.encoderF = [15, 16, 16, 16, 32]
         self.encoder_fc = nn.Linear(self.pool_size[-1] * self.encoderF[-1], 512, bias=True)
 
-        nn.init.xavier_normal_(self.encoder_fc.weight, gain=1.0)
-        nn.init.zeros_(self.encoder_fc.bias)
-
         self.coef_encoder_cheb_layers = nn.ModuleList([ChebResBlock(self.encoderF[0], self.encoderF[1], self.laplacians[0], self.K),
                                                 ChebResBlock(self.encoderF[1], self.encoderF[2], self.laplacians[1], self.K),
                                                 ChebResBlock(self.encoderF[2], self.encoderF[3], self.laplacians[2], self.K),
@@ -54,6 +51,23 @@ class SyncNet(nn.Module):
 
             Conv2d(256, 512, kernel_size=3, stride=1, padding=0),
             Conv2d(512, 512, kernel_size=1, stride=1, padding=0),)
+
+    
+    def init_weights(self):
+        nn.init.xavier_normal_(self.encoder_fc.weight, gain=1.0)
+        nn.init.zeros_(self.encoder_fc.bias)
+
+        ckpt = torch.load("models/lipsync_expert.pth", map_location='cpu')['state_dict']
+
+        own_state = self.state_dict()
+        pretrained_dict = {k: v for k, v in ckpt.items() if k in own_state}
+        own_state.update(pretrained_dict)
+
+        self.load_state_dict(own_state)
+
+        for p in self.audio_encoder.parameters():
+            p.requires_grad = False
+
 
     def poolwT(self, inputs, L):
         Mp = L.shape[0]

@@ -119,13 +119,13 @@ def train(device, model, train_data_loader, test_data_loader, optimizer,
 
             if global_step % opt.syncnet_eval_interval == 0:
                 with torch.no_grad():
-                    eval_model(test_data_loader, global_step, device, model, checkpoint_dir)
+                    eval_model(test_data_loader, global_step, device, model, checkpoint_dir, epoch)
 
             prog_bar.set_description('Epoch: {}, Loss: {}'.format(epoch, running_loss / (step + 1)))
 
         global_epoch += 1
 
-def eval_model(test_data_loader, global_step, device, model, checkpoint_dir):
+def eval_model(test_data_loader, global_step, device, model, checkpoint_dir, epoch):
     losses = []
     while 1:
         for step, (x, mel, y) in enumerate(test_data_loader):
@@ -142,7 +142,7 @@ def eval_model(test_data_loader, global_step, device, model, checkpoint_dir):
             losses.append(loss.item())
 
         averaged_loss = sum(losses) / len(losses)
-        print('Eval average loss: ', averaged_loss)
+        print('Epoch: {}, Eval average loss: {}'.format(epoch, averaged_loss))
 
         return
 
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         test_dataset, batch_size=opt.syncnet_batch_size, shuffle=False,
         num_workers=opt.syncnet_num_workers)
 
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = opt.device
 
     # Model
     model = SyncNet(opt).to(device)

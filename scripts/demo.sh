@@ -67,21 +67,22 @@ end_time="240"
 #     --n_epochs_decay 0 --load_size 256
 
 
-# python train_syncnet.py \
-#     --data_dir $target_dir
+python train_syncnet.py \
+    --data_dir $target_dir \
+    --gpu_ids 1
 
 
 # # # train audio2delta network
-python train_delta.py \
-    --dataset_mode audio_delta \
-    --num_epoch 100 \
-    --serial_batches False \
-    --display_freq 800 \
-    --print_freq 800 \
-    --batch_size 16 \
-    --gpu_ids 2 \
-    --data_dir $target_dir \
-    --net_dir $target_dir
+# python train_delta.py \
+#     --dataset_mode audio_delta \
+#     --num_epoch 100 \
+#     --serial_batches False \
+#     --display_freq 800 \
+#     --print_freq 800 \
+#     --batch_size 16 \
+#     --gpu_ids 2 \
+#     --data_dir $target_dir \
+#     --net_dir $target_dir
 
 
 # predict expression parameter from audio feature

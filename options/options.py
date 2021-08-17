@@ -62,7 +62,7 @@ class Options:
         self.parser.add_argument('--syncnet_batch_size', type=int, default=32)
         self.parser.add_argument('--syncnet_num_workers', type=int, default=2)
         self.parser.add_argument('--syncnet_lr', type=float, default=1e-4)
-        self.parser.add_argument('--syncnet_eval_interval', type=int, default=100000)
+        self.parser.add_argument('--syncnet_eval_interval', type=int, default=100)
         self.parser.add_argument('--syncnet_checkpoint_interval', type=int, default=10000)
         self.parser.add_argument('--nepochs', type=int, default=500)
         self.parser.add_argument('--syncnet_T', type=int, default=5)
