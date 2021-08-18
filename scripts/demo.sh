@@ -67,29 +67,52 @@ end_time="240"
 #     --n_epochs_decay 0 --load_size 256
 
 
-python train_syncnet.py \
-    --data_dir $target_dir \
-    --gpu_ids 1
+# python train_syncnet.py \
+#     --data_dir $target_dir \
+#     --gpu_ids 1
 
 
 # # # train audio2delta network
 # python train_delta.py \
 #     --dataset_mode audio_delta \
-#     --num_epoch 100 \
+#     --num_epoch 10 \
 #     --serial_batches False \
 #     --display_freq 800 \
 #     --print_freq 800 \
 #     --batch_size 16 \
-#     --gpu_ids 2 \
+#     --gpu_ids 3 \
 #     --data_dir $target_dir \
-#     --net_dir $target_dir
+#     --net_dir $target_dir  \
+#     --net_name_prefix 'norm_no_syncnet'
 
 
 # predict expression parameter from audio feature
 # python test_delta.py --dataset_mode audio_delta \
-#     --data_dir $source_dir \
+#     --gpu_ids 3 \
+#     --data_dir $target_dir \
+#     --net_dir $target_dir \
+#     --net_name_prefix 'norm_no_syncnet'
+
+# -----------------baseline---------------------
+# mkdir -p $target_dir/feature
+# python vendor/ATVGnet/code/test.py -i $target_dir/
+
+# python train_exp.py \
+#     --dataset_mode audio_expression \
+#     --num_epoch 10 \
+#     --serial_batches False \
+#     --display_freq 800 \
+#     --print_freq 800 \
+#     --batch_size 5 \
+#     --lr 1e-3 \
+#     --lambda_delta 1.0 \
+#     --data_dir $target_dir \
 #     --net_dir $target_dir
 
+# python test_exp.py --dataset_mode audio_expression \
+#     --data_dir $target_dir \
+#     --net_dir $target_dir
+# -----------------baseline---------------------
 
 # python reenact.py --src_dir $target_dir --tgt_dir $target_dir
 
@@ -120,12 +143,12 @@ python train_syncnet.py \
 
 # create final result
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/audio/audio.aac \
-#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/reenact_result.mp4
+#     -thread_queue_size 8192 -i $target_dir/audio/audio.aac \
+#     -thread_queue_size 8192 -i $target_dir/reenact/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $target_dir/debug_self_reenact_baseline.mp4
 
-# /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
-#     -i $source_dir/audio/audio.aac \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/debug_reenact.mp4
+/usr/bin/ffmpeg -hide_banner -y -loglevel warning \
+    -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
+    -thread_queue_size 8192 -i $target_dir/reenact/%05d.png \
+    -i $target_dir/audio/audio.aac \
+    -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/debug_self_reenact_baseline_compare.mp4

@@ -38,7 +38,7 @@ class Options:
         self.parser.add_argument('--lambda_var', type=float, default=0.0)
 
         self.parser.add_argument('--lambda_sync', type=float, default=0.0)
-        self.parser.add_argument('--syncnet_epoch', type=int, default=0)
+        self.parser.add_argument('--syncnet_epoch', type=int, default=10000)
 
         self.parser.add_argument('--display_port', type=int, default=11111, help='tensorboard port of the web display')
         self.parser.add_argument('--display_freq', type=int, default=2000, help='frequency of showing training results on screen')
@@ -50,6 +50,7 @@ class Options:
         self.parser.add_argument('--src_dir', type=str, default=None)
         self.parser.add_argument('--tgt_dir', type=str, default=None)
         self.parser.add_argument('--net_dir', type=str, default=None)
+        self.parser.add_argument('--net_name_prefix', type=str, default='')
 
         self.parser.add_argument('--test_num', type=int, default=10000)
         self.parser.add_argument('--gt_pose', type=self.str2bool, default=False)

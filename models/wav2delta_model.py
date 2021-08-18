@@ -11,7 +11,7 @@ class Wav2DeltaModel(nn.Module):
         self.opt = opt
         self.device = opt.device
         self.isTrain = opt.isTrain
-
+        self.lambda_sync = 0.0
         self.loss_names = ['Delta', 'Sync']
         self.visual_names = []
 
@@ -45,14 +45,19 @@ class Wav2DeltaModel(nn.Module):
         if self.opt.isTrain:
             self.indiv_mels = input['indiv_mels'].to(self.device)
             self.delta_gt = input['delta_gt'].to(self.device)
+            B, T, Fin = self.delta_gt.shape
+            self.delta_gt = self.delta_gt.reshape(B*T, Fin, 1)
+            self.delta_gt = self.net.exp_base.matmul(self.delta_gt).squeeze().reshape(B, T, -1)
         else:
             self.filename = input['filename']
 
         self.mel = input['mel'].to(self.device)
 
     def forward(self):
-        
-        self.delta = self.net(self.indiv_mels)
+        if self.isTrain:
+            self.delta = self.net(self.indiv_mels)
+        else:
+            self.delta = self.net(self.mel)
 
 
     def backward(self):
@@ -60,13 +65,12 @@ class Wav2DeltaModel(nn.Module):
         audio_emb, coef_emb = self.syncnet(self.mel, self.delta)
         self.loss_Sync = self.criterionSync(audio_emb, coef_emb)
 
-        self.loss = self.opt.lambda_sync * self.loss_Sync + (1 - self.opt.lambda_sync) * self.loss_Delta
-
+        self.loss = self.lambda_sync * self.loss_Sync + (1 - self.lambda_sync) * self.loss_Delta
         self.loss.backward()
 
     def optimize_parameters(self, epoch):
         if epoch >= self.syncnet_epoch:
-            self.opt.lambda_sync = 0.9
+            self.lambda_sync = self.opt.lambda_sync
         self.forward()
 
         self.optimizer.zero_grad()
@@ -98,7 +102,7 @@ class Wav2DeltaModel(nn.Module):
             self.forward()
 
     def save_delta(self):
-        torch.save(self.delta[0], os.path.join(self.opt.data_dir, 'reenact_delta', self.filename[0]))
+        torch.save(self.delta[0].reshape(-1, 1), os.path.join(self.opt.data_dir, 'reenact_delta', self.filename[0]))
 
     def update_learning_rate(self):
         self.scheduler.step()
@@ -106,10 +110,10 @@ class Wav2DeltaModel(nn.Module):
         print('learning rate = %.7f' % lr)
 
     def save_network(self):
-        save_path = os.path.join(self.opt.net_dir, 'delta_net.pth')
+        save_path = os.path.join(self.opt.net_dir, self.opt.net_name_prefix + 'delta_net.pth')
         torch.save(self.net.cpu().state_dict(), save_path)
 
     def load_network(self):
-        load_path = os.path.join(self.opt.net_dir, 'delta_net.pth')
+        load_path = os.path.join(self.opt.net_dir, self.opt.net_name_prefix + 'delta_net.pth')
         state_dict = torch.load(load_path, map_location=self.device)
         self.net.load_state_dict(state_dict)

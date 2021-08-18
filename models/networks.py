@@ -11,6 +11,7 @@ import os
 import utils
 import numpy as np
 import scipy.io as sio
+from torch.nn import functional as F
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -324,7 +325,7 @@ class Wav2Delta(nn.Module):
     def __init__(self, opt, output_dim=64):
         super(Wav2Delta, self).__init__()
         self.device = opt.device
-        self.trans_mat = self.get_trans_mat()
+        self.exp_base = self.get_exp_base()
 
         self.refer_mesh = read_obj(os.path.join('renderer', 'data', 'bfm09_face_template.obj'))
         self.laplacians, self.downsamp_trans, self.upsamp_trans, self.pool_size = utils.init_sampling(
@@ -383,14 +384,10 @@ class Wav2Delta(nn.Module):
         nn.init.zeros_(self.decoder_fc.bias)
 
 
-    def get_trans_mat(self):
+    def get_exp_base(self):
         mat_data = sio.loadmat('renderer/data/data.mat')
-        base = torch.from_numpy(mat_data['exp_base'])
-        baseT = base.T
-        m = baseT.matmul(base).inverse()
-        trans_mat = m.matmul(baseT).to(self.device)
-
-        return trans_mat
+        exp_base = torch.from_numpy(mat_data['exp_base']).to(self.device)
+        return exp_base
 
     def poolwT(self, inputs, L):
         Mp = L.shape[0]
@@ -410,8 +407,9 @@ class Wav2Delta(nn.Module):
         input_dim_size = len(x.size())
         if input_dim_size > 4:
             x = torch.cat([x[:, i] for i in range(x.size(1))], dim=0)
+
         out = self.audio_encoder(x).flatten(start_dim=1)
-        
+        out = F.normalize(out, p=2, dim=1)
         newB = out.shape[0]
         layer1 = self.relu(self.decoder_fc(out))
         layer1 = layer1.reshape(newB, self.pool_size[-1], self.decoderF[0])
@@ -424,11 +422,11 @@ class Wav2Delta(nn.Module):
         layer5 = self.poolwT(layer4, self.upsamp_trans[-4])
         out = self.decoder_cheb_layers[3](layer5)
         out = self.last_cheb(out)
-        out = out.reshape(newB, -1, 1)
-        out = self.trans_mat.matmul(out).squeeze()
+        out = out.reshape(newB, -1)
+        # out = self.trans_mat.matmul(out).squeeze()
 
         if input_dim_size > 4:
-            out = torch.split(out, B, dim=0)  # [(B, 64) * T]
+            out = torch.split(out, B, dim=0)  # [(B, 107127) * T]
             out = torch.stack(out, dim=1)
         return out
 

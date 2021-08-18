@@ -65,7 +65,10 @@ class FaceModel(nn.Module):
     def build_face_model(self, alpha, delta, beta):
         tex = self.tex_mean + self.tex_base.bmm(beta)
         tex = tex.reshape(self.batch_size, -1, 3)
-        geo = self.geo_mean + self.id_base.bmm(alpha) + self.exp_base.bmm(delta)
+        if delta.shape[1] == 64:
+            geo = self.geo_mean + self.id_base.bmm(alpha) + self.exp_base.bmm(delta)
+        else:
+            geo = self.geo_mean + self.id_base.bmm(alpha) + delta
         geo = geo.reshape(self.batch_size, -1, 3)
 
         return geo, tex

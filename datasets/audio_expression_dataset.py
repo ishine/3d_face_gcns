@@ -22,6 +22,10 @@ class AudioExpressionDataset(BaseDataset):
             self.rotation_list = util.load_coef(os.path.join(self.data_dir, 'rotation'))
             self.translation_list = util.load_coef(os.path.join(self.data_dir, 'translation'))
 
+            minlen = min(len(self.feature_list), len(self.alpha_list))
+            self.feature_list = self.feature_list[:minlen]
+            self.filenames = self.filenames[:minlen]
+
     def __len__(self):
         return len(self.feature_list)
 

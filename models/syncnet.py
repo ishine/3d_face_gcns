@@ -83,13 +83,17 @@ class SyncNet(nn.Module):
 
     
     def coef_encoder(self, inputs):
-        B, T, Fin = inputs.shape # inputs : B x T x 64
-        inputs = inputs.reshape((B * T, Fin, 1))
-        exp_base = self.exp_base.expand(B*T, -1, -1)
-        exp = exp_base.bmm(inputs) # exp : B*T x 107127
-        exp = exp.reshape(B, T, -1, 3) # exp : B x T x 35709 x 3
+        B, T, Fin = inputs.shape # inputs : B x T x 64  or B x T x 107127
+        if Fin == 64:
+            inputs = inputs.reshape((B * T, Fin, 1))
+            exp_base = self.exp_base.expand(B*T, -1, -1)
+            exp = exp_base.bmm(inputs) # exp : B*T x 107127
+            exp = exp.reshape(B, T, -1, 3) # exp : B x T x 35709 x 3
+        else:
+            exp = inputs.reshape(B, T, -1, 3)
         exp = exp.permute(0, 2, 3, 1) # exp : B x 35709 x 3 x T
         exp = exp.reshape(B, -1, 3 * T) # exp : B x 35709 x 3*T
+        
         layer1 = self.coef_encoder_cheb_layers[0](exp)          # layer1 = B x 35709 x 16
         layer2 = self.poolwT(layer1, self.downsamp_trans[0])    # layer2 = B x 8928 x 16
         layer2 = self.coef_encoder_cheb_layers[1](layer2)       # layer2 = B x 8928 x 16
