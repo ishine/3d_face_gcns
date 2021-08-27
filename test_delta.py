@@ -4,7 +4,7 @@ from tqdm import tqdm
 from options.options import Options
 from datasets import create_dataset
 from audiodvp_utils.util import create_dir
-from models import wav2delta_model
+from models import wav2delta_model, audio2expressionnet
 
 if __name__ == '__main__':
     opt = Options().parse_args()   # get training options
@@ -18,7 +18,8 @@ if __name__ == '__main__':
 
     dataset = create_dataset(opt)
 
-    model = wav2delta_model.Wav2DeltaModel(opt)
+    # model = wav2delta_model.Wav2DeltaModel(opt)
+    model = audio2expressionnet.Audio2ExpressionNet(opt)
     model.load_network()
     model.eval()
 
@@ -27,5 +28,3 @@ if __name__ == '__main__':
         model.test()           # run inference
         model.save_delta()
 
-        if i >= opt.test_num - 1:
-            break

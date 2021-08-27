@@ -4,7 +4,7 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 from . import networks
-
+import numpy as np
 
 class AudioExpressionModel:
     def __init__(self, opt):
@@ -14,6 +14,7 @@ class AudioExpressionModel:
 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
         self.loss_names = ['Delta']
+        self.exp_ev = self.get_exp_ev()
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = []
 
@@ -22,11 +23,19 @@ class AudioExpressionModel:
 
         if self.isTrain:
             # define loss functions
-            self.criterionDelta = nn.MSELoss() if self.opt.lambda_delta > 0.0 else None
+            # self.criterionDelta = nn.MSELoss() if self.opt.lambda_delta > 0.0 else None
+            self.criterionDelta = networks.WeightedMSELoss(self.exp_ev)
 
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer = torch.optim.Adam(self.net.parameters(), lr=opt.lr, betas=(0.5, 0.999))
 
+    def get_exp_ev(self):
+        exp_ev = torch.from_numpy(np.loadtxt('renderer/data/std_exp.txt')[:64])
+        exp_ev = torch.sqrt(exp_ev)
+        exp_ev = exp_ev / exp_ev[0]
+        exp_ev = exp_ev.float()
+        return exp_ev.to(self.device)
+    
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
         Parameters:

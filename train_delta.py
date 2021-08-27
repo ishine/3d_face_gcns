@@ -3,14 +3,15 @@ import time
 from options.options import Options
 from datasets import create_dataset
 from audiodvp_utils.visualizer import Visualizer
-from models import wav2delta_model
+from models import wav2delta_model, audio2expressionnet
 
 if __name__ == '__main__':
     opt = Options().parse_args()   # get training options
 
     dataset = create_dataset(opt)
 
-    model = wav2delta_model.Wav2DeltaModel(opt)
+    # model = wav2delta_model.Wav2DeltaModel(opt)
+    model = audio2expressionnet.Audio2ExpressionNet(opt)
 
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
 
@@ -32,7 +33,7 @@ if __name__ == '__main__':
             epoch_iter += opt.batch_size
 
             model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters(epoch)   # calculate loss functions, get gradients, update network weights
+            model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
 
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 visualizer.display_current_results(model.get_current_visuals(), total_iters)

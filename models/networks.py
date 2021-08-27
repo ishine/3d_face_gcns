@@ -277,6 +277,49 @@ class SyncLoss(nn.Module):
         return loss
 
 
+class WeightedMSELoss(nn.Module):
+    def __init__(self, weight):
+        super(WeightedMSELoss, self).__init__()
+        self.weight = weight
+    
+    def forward(self, input, target):
+        
+        return (self.weight * (input - target) ** 2).mean()
+
+
+class WeightedL1Loss(nn.Module):
+    def __init__(self, weight):
+        super(WeightedL1Loss, self).__init__()
+        self.weight = weight
+    
+    def forward(self, input, target):
+        
+        return (self.weight * torch.abs(input - target)).mean()
+
+
+class WeightedRMSLoss(nn.Module):
+    def __init__(self, weight):
+        super(WeightedRMSLoss, self).__init__()
+        self.weight = weight
+    
+    def forward(self, input, target):
+        return torch.sqrt((self.weight * (input - target)**2).mean())
+
+
+class MaskedVertexRMSLoss(nn.Module):
+    def __init__(self, exp_base, mask):
+        super(MaskedVertexRMSLoss, self).__init__()
+        self.exp_base = exp_base
+        self.mask = mask
+
+    def forward(self, input, target):
+
+        B = input.shape[0]
+        diff_expression = input - target
+        diff_vertices = self.exp_base.matmul(diff_expression).reshape(B, -1, 3)
+        return torch.sqrt(torch.mean(self.mask * (diff_vertices ** 2)))
+
+
 class AudioExpressionModule(nn.Module):
     def __init__(self, opt):
         super(AudioExpressionModule, self).__init__()
@@ -293,6 +336,90 @@ class AudioExpressionModule(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x.unsqueeze(-1)
+
+
+class ExpressionEstimator_Attention(nn.Module):
+    def __init__(self, seq_len):
+        super(ExpressionEstimator_Attention, self).__init__()
+        self.seq_len = seq_len
+        self.subspace_dim = 32
+
+        self.convNet = nn.Sequential(
+            nn.Conv2d(29, 32, kernel_size=(3,1), stride=(2,1), padding=(1,0), bias=True), #  29 x 16 x 1 => 32 x 8 x 1
+            nn.LeakyReLU(0.02, True),
+            nn.Conv2d(32, 32, kernel_size=(3,1), stride=(2,1), padding=(1,0), bias=True), # 32 x 8 x 1 => 32 x 4 x 1
+            nn.LeakyReLU(0.02, True),
+            nn.Conv2d(32, 64, kernel_size=(3,1), stride=(2,1), padding=(1,0), bias=True), # 32 x 4 x 1 => 64 x 2 x 1
+            nn.LeakyReLU(0.02, True),
+            nn.Conv2d(64, 64, kernel_size=(3,1), stride=(2,1), padding=(1,0), bias=True), # 64 x 2 x 1 => 64 x 1 x 1
+            nn.LeakyReLU(0.02, True),
+        )
+
+        self.fullNet = nn.Sequential(
+            nn.Linear(in_features = 64, out_features=128, bias = True),
+            nn.LeakyReLU(0.02),
+            nn.Linear(in_features = 128, out_features=64, bias = True),
+            nn.LeakyReLU(0.02),
+            nn.Linear(in_features=64, out_features=self.subspace_dim, bias = True),
+            nn.Tanh()
+        )
+
+        self.last_fc = nn.Linear(in_features=self.subspace_dim, out_features=64, bias = False)
+
+        # attention
+        self.attentionConvNet = nn.Sequential( # b x subspace_dim x seq_len
+            nn.Conv1d(self.subspace_dim, 16, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.LeakyReLU(0.02, True),
+            nn.Conv1d(16, 8, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.LeakyReLU(0.02, True),
+            nn.Conv1d(8, 4, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.LeakyReLU(0.02, True),
+            nn.Conv1d(4, 2, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.LeakyReLU(0.02, True),
+            nn.Conv1d(2, 1, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.LeakyReLU(0.02, True)
+        )
+        self.attentionNet = nn.Sequential(
+            nn.Linear(in_features = self.seq_len, out_features=self.seq_len, bias = True),   
+            nn.Softmax(dim=1)
+            )
+
+        self.apply(weights_init)
+        torch.nn.init.normal_(self.last_fc.weight, 0.0, 0.02)
+
+            
+    def forward(self, audio_features):
+        result_subspace, intermediate_expression = self.getAudioExpressions(audio_features)
+        b = result_subspace.shape[0]
+        result = 10.0 * self.last_fc(result_subspace.reshape(b, 1, self.subspace_dim)).reshape(b, 64, 1)
+        result_intermediate = 10.0 * self.last_fc(intermediate_expression.reshape(b, 1, self.subspace_dim)).reshape(b, 64, 1)
+        return result, result_intermediate
+
+    def getAudioExpressions(self, audio_features):
+        # audio_features: b x seq_len x 16 x 29
+        b = audio_features.shape[0] # batchsize
+        audio_features = audio_features.reshape(b * self.seq_len, 1, 16, 29) # b * seq_len x 1 x 16 x 29
+        audio_features = torch.transpose(audio_features, 1, 3).contiguous() # b* seq_len  x 29 x 16 x 1
+        conv_res = self.convNet(audio_features) # b*seq_len x 64 x 1 x 1
+        conv_res = torch.reshape(conv_res, (b * self.seq_len, 1, -1))   # b*seq_len x 1 x 64
+        result_subspace = self.fullNet(conv_res)[:,0,:] # b * seq_len x subspace_dim
+        result_subspace = result_subspace.reshape(b, self.seq_len, self.subspace_dim)# b x seq_len x subspace_dim
+
+        #################
+        ### attention ###
+        ################# 
+        result_subspace_T = torch.transpose(result_subspace, 1, 2) # b x subspace_dim x seq_len
+        intermediate_expression = result_subspace_T[:,:,(self.seq_len // 2):(self.seq_len // 2) + 1] # b x subspace_dim x 1
+        att_conv_res = self.attentionConvNet(result_subspace_T)
+        #print('att_conv_res', att_conv_res.shape)
+        attention = self.attentionNet(att_conv_res.reshape(b, self.seq_len)).reshape(b, self.seq_len, 1) # b x seq_len x 1
+        #print('attention', attention.shape)
+        # pooling along the sequence dimension
+        result_subspace = torch.bmm(result_subspace_T, attention)
+        #print('result_subspace', result_subspace.shape)
+        ###
+
+        return result_subspace.reshape(b, self.subspace_dim, 1), intermediate_expression
 
 
 class MouthMask(nn.Module):
@@ -316,16 +443,22 @@ class MouthMask(nn.Module):
 
 def weights_init(m):
     classname = m.__class__.__name__
-    if classname.find('Linear') != -1:
-        torch.nn.init.xavier_normal_(m.weight, gain=torch.nn.init.calculate_gain('relu'))
-        torch.nn.init.zeros_(m.bias)
+    if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+        torch.nn.init.xavier_normal_(m.weight.data, gain=torch.nn.init.calculate_gain('relu'))
+
+        if hasattr(m, 'bias') and m.bias is not None:
+            torch.nn.init.zeros_(m.bias.data)
+
+    elif classname.find('BatchNorm2d') != -1:
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.zeros_(m.bias.data)
 
 
 class Wav2Delta(nn.Module):
     def __init__(self, opt, output_dim=64):
         super(Wav2Delta, self).__init__()
         self.device = opt.device
-        self.exp_base = self.get_exp_base()
+        self.exp_base, self.trans_mat = self.get_exp_matrices()
 
         self.refer_mesh = read_obj(os.path.join('renderer', 'data', 'bfm09_face_template.obj'))
         self.laplacians, self.downsamp_trans, self.upsamp_trans, self.pool_size = utils.init_sampling(
@@ -362,7 +495,13 @@ class Wav2Delta(nn.Module):
                                                 ChebResBlock(self.decoderF[2], self.decoderF[3], self.laplacians[-4], self.K),
                                                 ChebResBlock(self.decoderF[3], self.decoderF[4], self.laplacians[-5], self.K)])
 
-        self.last_cheb = ChebConv(3, 3, self.laplacians[0], self.K, is_last=True)
+        self.last_cheb = ChebConv(3, 3, self.laplacians[0], self.K, zero_init=True)
+
+        self.fc = nn.Sequential(nn.Linear(512, 256),
+                nn.ReLU(),
+                nn.Linear(256, 128),
+                nn.ReLU())
+        self.last_fc = nn.Linear(128, output_dim)
 
         pretrained_audio_encoder_path = "models/wav2delta_pretrained.pth"
         self.init_weights(pretrained_audio_encoder_path)
@@ -383,11 +522,19 @@ class Wav2Delta(nn.Module):
         nn.init.xavier_normal_(self.decoder_fc.weight, gain=nn.init.calculate_gain('relu'))
         nn.init.zeros_(self.decoder_fc.bias)
 
+        self.fc.apply(weights_init)
+        nn.init.zeros_(self.last_fc.weight)
+        nn.init.zeros_(self.last_fc.bias)
 
-    def get_exp_base(self):
+
+    def get_exp_matrices(self):
         mat_data = sio.loadmat('renderer/data/data.mat')
-        exp_base = torch.from_numpy(mat_data['exp_base']).to(self.device)
-        return exp_base
+        exp_base = torch.from_numpy(mat_data['exp_base']).to(self.device).double()
+        exp_base_T = exp_base.T
+        inv_sym_base = exp_base_T.matmul(exp_base).inverse()
+        trans_mat = inv_sym_base.matmul(exp_base.T).to(self.device)
+
+        return exp_base, trans_mat
 
     def poolwT(self, inputs, L):
         Mp = L.shape[0]
@@ -409,24 +556,26 @@ class Wav2Delta(nn.Module):
             x = torch.cat([x[:, i] for i in range(x.size(1))], dim=0)
 
         out = self.audio_encoder(x).flatten(start_dim=1)
-        out = F.normalize(out, p=2, dim=1)
-        newB = out.shape[0]
-        layer1 = self.relu(self.decoder_fc(out))
-        layer1 = layer1.reshape(newB, self.pool_size[-1], self.decoderF[0])
-        layer2 = self.poolwT(layer1, self.upsamp_trans[-1])
-        layer2 = self.decoder_cheb_layers[0](layer2)
-        layer3 = self.poolwT(layer2, self.upsamp_trans[-2])
-        layer3 = self.decoder_cheb_layers[1](layer3)
-        layer4 = self.poolwT(layer3, self.upsamp_trans[-3])
-        layer4 = self.decoder_cheb_layers[2](layer4)
-        layer5 = self.poolwT(layer4, self.upsamp_trans[-4])
-        out = self.decoder_cheb_layers[3](layer5)
-        out = self.last_cheb(out)
-        out = out.reshape(newB, -1)
-        # out = self.trans_mat.matmul(out).squeeze()
+        # out = F.normalize(out, p=2, dim=1)
+        # newB = out.shape[0]
+        # layer1 = self.relu(self.decoder_fc(out))
+        # layer1 = layer1.reshape(newB, self.pool_size[-1], self.decoderF[0])
+        # layer2 = self.poolwT(layer1, self.upsamp_trans[-1])
+        # layer2 = self.decoder_cheb_layers[0](layer2)
+        # layer3 = self.poolwT(layer2, self.upsamp_trans[-2])
+        # layer3 = self.decoder_cheb_layers[1](layer3)
+        # layer4 = self.poolwT(layer3, self.upsamp_trans[-3])
+        # layer4 = self.decoder_cheb_layers[2](layer4)
+        # layer5 = self.poolwT(layer4, self.upsamp_trans[-4])
+        # out = self.decoder_cheb_layers[3](layer5)
+        # out = self.last_cheb(out)
+        # out = out.reshape(newB, -1, 1).double()
+        # out = self.trans_mat.matmul(out).squeeze().float()
+        out = self.last_fc(self.fc(out))
+
 
         if input_dim_size > 4:
-            out = torch.split(out, B, dim=0)  # [(B, 107127) * T]
+            out = torch.split(out, B, dim=0)  # [(B, 64) * T]
             out = torch.stack(out, dim=1)
         return out
 

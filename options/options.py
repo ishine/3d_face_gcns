@@ -69,6 +69,9 @@ class Options:
         self.parser.add_argument('--syncnet_T', type=int, default=5)
         self.parser.add_argument('--syncnet_mel_step_size', type=int, default=16)
 
+        # audio2expressionNet training parameters
+        self.parser.add_argument('--seq_len', type=int, default=8)
+
     def parse_args(self):
         self.args = self.parser.parse_args()
         self.args.device = torch.device('cuda:{}'.format(self.args.gpu_ids[0])) if self.args.gpu_ids else torch.device('cpu')

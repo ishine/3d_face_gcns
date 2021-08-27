@@ -9,7 +9,7 @@ import utils
 from lib import graph
 
 class ChebConv(nn.Module):
-    def __init__(self, in_channels, out_channels, laplacian, K, is_last=False):
+    def __init__(self, in_channels, out_channels, laplacian, K, zero_init=False, is_last=False):
         super(ChebConv, self).__init__()
 
         self.laplacian = laplacian
@@ -20,6 +20,9 @@ class ChebConv(nn.Module):
             nn.init.xavier_normal_(self.fc.weight, gain=nn.init.calculate_gain('tanh'))
         else:
             nn.init.xavier_normal_(self.fc.weight, gain=nn.init.calculate_gain('relu'))
+
+        if zero_init:
+            nn.init.zeros_(self.fc.weight)
         nn.init.zeros_(self.fc.bias)
     
     def forward(self, x):

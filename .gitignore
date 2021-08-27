@@ -9,3 +9,7 @@ facegcn_test.ipynb
 wav2lip.pth
 wav2delta_pretrained.pth
 lipsync_expert.pth
+._audio
+deepspeech-0.9.3-models.pbmm
+deepspeech-0.9.3-models.scorer
+output_graph.pb

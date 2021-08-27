@@ -4,6 +4,7 @@ from collections import OrderedDict
 import os
 from . import networks
 from .syncnet import SyncNet
+import numpy as np
 
 class Wav2DeltaModel(nn.Module):
     def __init__(self, opt):
@@ -14,21 +15,22 @@ class Wav2DeltaModel(nn.Module):
         self.lambda_sync = 0.0
         self.loss_names = ['Delta', 'Sync']
         self.visual_names = []
+        self.exp_ev = self.get_exp_ev()
 
         self.net = networks.Wav2Delta(opt).to(self.device)
-        self.syncnet = SyncNet(opt)
-        pretrained_dir = os.path.join(opt.data_dir, 'syncnet_ckpt')
-        self.load_syncnet(pretrained_dir)
-        self.syncnet.to(self.device)
-        self.syncnet_epoch = opt.syncnet_epoch
+        
+        if self.isTrain:
+            self.syncnet = SyncNet(opt)
+            pretrained_dir = os.path.join(opt.data_dir, 'syncnet_ckpt')
+            self.load_syncnet(pretrained_dir)
+            self.syncnet.to(self.device)
+            self.syncnet_epoch = opt.syncnet_epoch
 
         if self.isTrain:
-            self.criterionDelta = nn.MSELoss()
+            self.criterionDelta = networks.WeightedMSELoss(self.exp_ev)
             self.criterionSync = networks.SyncLoss(opt.device)
 
-            self.optimizer = torch.optim.Adam([{'params' : self.net.decoder_fc.parameters()}, 
-                                                {'params' : self.net.decoder_cheb_layers.parameters()},
-                                                {'params' : self.net.last_cheb.parameters()}], lr=opt.lr, betas=(0.5, 0.999))
+            self.optimizer = torch.optim.Adam(self.net.parameters(), lr=opt.lr, betas=(0.5, 0.999))
 
     def load_syncnet(self, pretrained_dir):
         ckpt_list = sorted(os.listdir(pretrained_dir))
@@ -39,15 +41,19 @@ class Wav2DeltaModel(nn.Module):
 
         for p in self.syncnet.parameters():
             p.requires_grad = False
+    
+    def get_exp_ev(self):
+        exp_ev = torch.from_numpy(np.loadtxt('renderer/data/std_exp.txt')[:64])
+        exp_ev = torch.sqrt(exp_ev)
+        exp_ev = exp_ev / exp_ev[0]
+        exp_ev = exp_ev.float()
+        return exp_ev.to(self.device)
 
 
     def set_input(self, input):
         if self.opt.isTrain:
             self.indiv_mels = input['indiv_mels'].to(self.device)
             self.delta_gt = input['delta_gt'].to(self.device)
-            B, T, Fin = self.delta_gt.shape
-            self.delta_gt = self.delta_gt.reshape(B*T, Fin, 1)
-            self.delta_gt = self.net.exp_base.matmul(self.delta_gt).squeeze().reshape(B, T, -1)
         else:
             self.filename = input['filename']
 
@@ -65,7 +71,7 @@ class Wav2DeltaModel(nn.Module):
         audio_emb, coef_emb = self.syncnet(self.mel, self.delta)
         self.loss_Sync = self.criterionSync(audio_emb, coef_emb)
 
-        self.loss = self.lambda_sync * self.loss_Sync + (1 - self.lambda_sync) * self.loss_Delta
+        self.loss = self.loss_Delta * (1 - self.lambda_sync) + self.loss_Sync * self.lambda_sync
         self.loss.backward()
 
     def optimize_parameters(self, epoch):
