@@ -17,8 +17,11 @@ class Audio2ExpressionDataset(BaseDataset):
         if opt.isTrain:
             self.delta_list = util.load_coef(os.path.join(self.data_dir, 'delta'))
             minlen = min(len(self.feature_list), len(self.delta_list))
-            self.feature_list = self.feature_list[:minlen]
-            self.filenames = self.filenames[:minlen]
+            train_idx = int(minlen * 4 / 5)
+            self.feature_list = self.feature_list[:train_idx]
+            self.filenames = self.filenames[:train_idx]
+        
+        print('audio2expr datset length : ', len(self.feature_list))
 
     def __len__(self):
         return len(self.feature_list)

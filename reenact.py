@@ -51,6 +51,3 @@ if __name__ == '__main__':
         rescaled_render = rescaled_render[top:bottom, left:right]
         rescaled_render = cv2.resize(rescaled_render, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
         cv2.imwrite(os.path.join(opt.src_dir, 'reenact', os.path.basename(full_image_list[i])), rescaled_render)
-
-        if i >= opt.test_num:
-            break
