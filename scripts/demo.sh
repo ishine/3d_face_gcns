@@ -1,6 +1,10 @@
 set -ex
 
 # set data path
+# target_dir : directory for training data
+# source_dir : directory for inference data, put test audio in source_dir/audio directory
+# video_dir : path for training video
+
 target_dir="data/kkj/kkj04"
 source_dir="data/kkj/kkj04"
 video_dir="data/kkj/kkj04/KKJ_slow_04_stand.mp4"
@@ -15,21 +19,23 @@ end_time="240"
 # mkdir -p $target_dir/audio
 # mkdir -p $source_dir/audio
 
+# 1. Take all frames and audio of training data
+# warning! the number of extracted frames should be dividable by 5. 
+# If the number of frames of training video is not dividable by 5, delete some frames manually to make the number of frames dividable by 5
+
 # ffmpeg -hide_banner -y -i $video_dir -r 25 $target_dir/full/%05d.png
 # ffmpeg -hide_banner -y -i $video_dir -ar 16000 $target_dir/audio/audio.wav
 
-
+# 2. Take deep-speech audio feature of training audio
 # extract high-level feature from train audio
 # python audio_feature_extract.py --data_dir $target_dir
 
-
+# 3. Take deep-speech audio feature of test audio
 # extract high-level feature from test audio
 # mkdir -p $source_dir/feature
 # python audio_feature_extract.py --data_dir $source_dir
 
 
-
-# warning! the number of extracted frames should be dividable by 5.
 # # crop and resize video frames
 # python audiodvp_utils/crop_portrait.py \
 #     --data_dir $target_dir \
@@ -48,9 +54,6 @@ end_time="240"
 #     --epoch_tex 5 \
 #     --epoch_warm_up 10
 
-# python audiodvp_utils/rescale_image.py \
-#       --data_dir $target_dir
-
 # build neural face renderer data pair
 # python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
 
@@ -60,13 +63,6 @@ end_time="240"
 #     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
 #     -i $target_dir/audio/audio.wav \
 #     -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/debug.mp4
-
-# /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-#     -thread_queue_size 8192 -i $target_dir/rescaled_render/%05d.png \
-#     -thread_queue_size 8192 -i $target_dir/full/%05d.png \
-#     -thread_queue_size 8192 -i $target_dir/rescaled_overlay/%05d.png \
-#     -i $target_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/debug2.mp4
 
 
 # train neural face renderer
@@ -101,7 +97,6 @@ end_time="240"
 
 # python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
-
 # choose best epoch with lowest loss
 # epoch=25
 
@@ -124,7 +119,6 @@ end_time="240"
 
 # composite lower face back to original video
 # python comp.py --src_dir $source_dir --tgt_dir $target_dir
-
 
 # create final result
 # mkdir -p $source_dir/results
