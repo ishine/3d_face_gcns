@@ -2,7 +2,7 @@ set -ex
 
 # set data path
 target_dir="data/kkj/kkj04"
-source_dir="data/kkj/kkj03"
+source_dir="data/kkj/kkj04"
 video_dir="data/kkj/kkj04/KKJ_slow_04_stand.mp4"
 
 
@@ -145,9 +145,3 @@ end_time="240"
 #     -thread_queue_size 8192 -i $target_dir/comp/%05d.png \
 #     -i $target_dir/audio/audio.wav \
 #     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/inference_kkj03.mp4
-
-/usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-    -thread_queue_size 8192 -i $source_dir/full/%05d.png \
-    -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-    -i $source_dir/audio/audio.wav \
-    -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/inference_kkj03.mp4
