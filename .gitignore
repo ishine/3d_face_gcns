@@ -4,7 +4,7 @@ log/
 runs/
 weights/
 vendor/ATVGnet/model/
-audiodvp_utils/face_detection/detection/sfd/
+audiodvp_utils/face_detection/detection/sfd/s3fd.pth
 facegcn_test.ipynb
 wav2lip.pth
 wav2delta_pretrained.pth
