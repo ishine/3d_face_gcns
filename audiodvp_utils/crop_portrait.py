@@ -14,6 +14,8 @@ import face_detection
 
 def calc_bbox(image_list, batch_size=5):
     """Batch infer of face location, batch_size should be factor of total frame number."""
+    fa = face_detection.FaceAlignment(face_detection.LandmarksType._2D, flip_input=False, device='cuda')
+
     top_best = 10000
     bottom_best = 0
     right_best = 0
@@ -26,9 +28,11 @@ def calc_bbox(image_list, batch_size=5):
             image = face_recognition.load_image_file(image_list[j])
             image_batch.append(image)
         
-        face_locations = face_recognition.batch_face_locations(image_batch, number_of_times_to_upsample=0, batch_size=batch_size)
-        for face_location in face_locations:
-            top, right, bottom, left = face_location[0]  # assuming only one face detected in the frame
+        # face_locations = face_recognition.batch_face_locations(image_batch, number_of_times_to_upsample=0, batch_size=batch_size)
+        preds = fa.get_detections_for_batch(np.asarray(image_batch))
+
+        for face_location in preds:
+            top, right, bottom, left = face_location  # assuming only one face detected in the frame
             
             if top_best > top:
                 top_best = top
@@ -48,16 +52,18 @@ def crop_image(data_dir, dest_size, crop_level, vertical_adjust):
     height = bottom - top
     width = right - left
 
+    H, W, _ = face_recognition.load_image_file(image_list[0]).shape
+
     crop_size = int(height * crop_level)
 
     horizontal_delta = (crop_size - width) // 2
     vertical_delta = (crop_size - height) // 2
 
-    left -= horizontal_delta
-    right += horizontal_delta
+    left = max(left - horizontal_delta, 0)
+    right = min(right + horizontal_delta, W)
 
-    top -= int(vertical_delta * 0.5)
-    bottom += int(vertical_delta * 1.5)
+    top = max(top - int(vertical_delta * 0.5), 0)
+    bottom = min(bottom + int(vertical_delta * 1.5), H)
 
     for i in tqdm(range(len(image_list))):
         image =cv2.imread(image_list[i])
@@ -65,6 +71,8 @@ def crop_image(data_dir, dest_size, crop_level, vertical_adjust):
 
         image = cv2.resize(image, (dest_size, dest_size), interpolation=cv2.INTER_AREA)
         cv2.imwrite(os.path.join(args.data_dir, 'crop', os.path.basename(image_list[i])), image)
+        torch.save([top, bottom, left, right], os.path.join(data_dir, 'crop_region', os.path.basename(image_list[i]))[:-4]+'.pt')
+
 
 
 def crop_per_image(data_dir, dest_size, crop_level):
@@ -82,17 +90,17 @@ def crop_per_image(data_dir, dest_size, crop_level):
 
     batches = [frames[i:i + batch_size] for i in range(0, len(frames), batch_size)]
 
-    util.create_dir(os.path.join(data_dir, 'crop_region'))
-
     for idx in tqdm(range(len(batches))):
         fb = batches[idx]
         preds = fa.get_detections_for_batch(np.asarray(fb))
 
         for j, f in enumerate(preds):
             if f is None:
-                continue
+                print('no face in image {}'.format(idx * batch_size + j))
+            else:
+                left, top, right, bottom = f
 
-            left, top, right, bottom = f
+            
             height = bottom - top
             width = right - left
             crop_size = int(height * crop_level)
@@ -119,4 +127,6 @@ if __name__ == '__main__':
     parser.add_argument('--crop_level', type=float, default=2.0, help='Adjust crop image size.')
     parser.add_argument('--vertical_adjust', type=float, default=0.3, help='Adjust vertical location of portrait in image.')
     args = parser.parse_args()
+    util.create_dir(os.path.join(args.data_dir, 'crop_region'))
     crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
+    # crop_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level, vertical_adjust=args.vertical_adjust)

@@ -47,6 +47,3 @@ if __name__ == '__main__':
         comp = rescaled_mask * cover_img + (1 - rescaled_mask) * bg
 
         cv2.imwrite(os.path.join(opt.src_dir, 'comp', '%05d.png' % (i+1)), comp)
-
-        if i >= opt.test_num:
-            break

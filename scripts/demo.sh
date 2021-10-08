@@ -1,9 +1,10 @@
 set -ex
 
 # set data path
-target_dir="data/kkj/kkj03"
+target_dir="data/kkj/kkj04"
 source_dir="data/kkj/kkj03"
 video_dir="data/kkj/kkj04/KKJ_slow_04_stand.mp4"
+
 
 # set video clip duration
 start_time="00:00:00"
@@ -15,11 +16,11 @@ end_time="240"
 # mkdir -p $source_dir/audio
 
 # ffmpeg -hide_banner -y -i $video_dir -r 25 $target_dir/full/%05d.png
-# ffmpeg -hide_banner -y -i $video_dir $target_dir/audio/audio.wav
+# ffmpeg -hide_banner -y -i $video_dir -ar 16000 $target_dir/audio/audio.wav
 
 
 # extract high-level feature from train audio
-# python audio_feature_extract.py --data_dir $target_dir 
+# python audio_feature_extract.py --data_dir $target_dir
 
 
 # extract high-level feature from test audio
@@ -27,6 +28,8 @@ end_time="240"
 # python audio_feature_extract.py --data_dir $source_dir
 
 
+
+# warning! the number of extracted frames should be dividable by 5.
 # # crop and resize video frames
 # python audiodvp_utils/crop_portrait.py \
 #     --data_dir $target_dir \
@@ -63,7 +66,7 @@ end_time="240"
 #     -thread_queue_size 8192 -i $target_dir/full/%05d.png \
 #     -thread_queue_size 8192 -i $target_dir/rescaled_overlay/%05d.png \
 #     -i $target_dir/audio/audio.wav \
-#     -filter_complex hstack=input s=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/debug2.mp4
+#     -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/debug2.mp4
 
 
 # train neural face renderer
@@ -77,7 +80,7 @@ end_time="240"
 # # # train audio2delta network
 # python train_delta.py \
 #     --dataset_mode audio2expression \
-#     --num_epoch 30 \
+#     --num_epoch 10 \
 #     --serial_batches False \
 #     --display_freq 800 \
 #     --print_freq 800 \
@@ -89,7 +92,7 @@ end_time="240"
 #     --net_name_prefix ''
 
 
-# predict expression parameter from audio feature
+# # predict expression parameter from audio feature
 # python test_delta.py --dataset_mode audio2expression \
 #     --gpu_ids 3 \
 #     --data_dir $source_dir \
@@ -100,7 +103,7 @@ end_time="240"
 
 
 # choose best epoch with lowest loss
-# epoch=100
+# epoch=25
 
 # neural rendering the reenact face sequence
 # python vendor/neural_face_renderer/test.py --model test \
@@ -128,17 +131,23 @@ end_time="240"
 
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
 #     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/self_reenact_and_test.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
 #     -thread_queue_size 8192 -i $target_dir/reenact/%05d.png \
 #     -i $target_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/self_reenact_and_test_80.mp4
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/debug.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/full/%05d.png \
 #     -thread_queue_size 8192 -i $target_dir/comp/%05d.png \
 #     -i $target_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/debug_puppetry_RMS_vertice_level_self_reenact_comp.mp4
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/inference_kkj03.mp4
+
+/usr/bin/ffmpeg -hide_banner -y -loglevel warning \
+    -thread_queue_size 8192 -i $source_dir/full/%05d.png \
+    -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+    -i $source_dir/audio/audio.wav \
+    -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/inference_kkj03.mp4
