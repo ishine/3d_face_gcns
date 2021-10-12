@@ -42,6 +42,8 @@ end_time="240"
 #     --crop_level 1.5 \
 #     --vertical_adjust 0.2
 
+# pose normalization
+python lipsync3d/pose_normalization.py --data_dir $target_dir
 
 # # 3D face reconstruction
 # python train.py \
