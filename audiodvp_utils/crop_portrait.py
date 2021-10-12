@@ -32,8 +32,7 @@ def calc_bbox(image_list, batch_size=5):
         preds = fa.get_detections_for_batch(np.asarray(image_batch))
 
         for face_location in preds:
-            top, right, bottom, left = face_location  # assuming only one face detected in the frame
-            
+            left, top, right, bottom = face_location  # assuming only one face detected in the frame
             if top_best > top:
                 top_best = top
             if bottom_best < bottom:
@@ -48,11 +47,10 @@ def calc_bbox(image_list, batch_size=5):
 
 def crop_image(data_dir, dest_size, crop_level, vertical_adjust):
     image_list = util.get_file_list(os.path.join(data_dir, 'full'))
+    H, W, _ = face_recognition.load_image_file(image_list[0]).shape
     top, right, bottom, left = calc_bbox(image_list)
     height = bottom - top
     width = right - left
-
-    H, W, _ = face_recognition.load_image_file(image_list[0]).shape
 
     crop_size = int(height * crop_level)
 
@@ -128,5 +126,5 @@ if __name__ == '__main__':
     parser.add_argument('--vertical_adjust', type=float, default=0.3, help='Adjust vertical location of portrait in image.')
     args = parser.parse_args()
     util.create_dir(os.path.join(args.data_dir, 'crop_region'))
-    crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
-    # crop_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level, vertical_adjust=args.vertical_adjust)
+    # crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
+    crop_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level, vertical_adjust=args.vertical_adjust)

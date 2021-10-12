@@ -5,9 +5,9 @@ set -ex
 # source_dir : directory for inference data, put test audio in source_dir/audio directory
 # video_dir : path for training video
 
-target_dir="data/kkj/kkj04"
-source_dir="data/kkj/kkj04"
-video_dir="data/kkj/kkj04/KKJ_slow_04_stand.mp4"
+target_dir="data/kkj/kkj04_lipsync3d"
+source_dir="data/kkj/kkj04_lipsync3d"
+video_dir="data/kkj/kkj04_lipsync3d/KKJ_slow_04_stand.mp4"
 
 
 # set video clip duration
