@@ -72,7 +72,7 @@ def normalized_to_pixel_coordinates(landmark_dict, image_width, image_height):
             return None
         x_px = coord[0] * image_width
         y_px = coord[1] * image_height
-        z_px = coord[0] * image_width
+        z_px = coord[2] * image_width
         landmark_pixel_coord_dict[idx] = [x_px, y_px, z_px]
     return landmark_pixel_coord_dict
 

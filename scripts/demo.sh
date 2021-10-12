@@ -127,8 +127,8 @@ python lipsync3d/pose_normalization.py --data_dir $target_dir
 
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/self_reenact_and_test.mp4
+#     -thread_queue_size 8192 -i $source_dir/mesh_norm_image/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/mesh_normalization_identity.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
