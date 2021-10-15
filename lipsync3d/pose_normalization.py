@@ -10,7 +10,7 @@ import argparse
 import math
 from tqdm import tqdm
 import torch
-import utils
+from utils import landmark_to_dict
 import numpy as np
 import cv2
 import mediapipe as mp
@@ -20,12 +20,6 @@ import mediapipe.python.solutions.face_mesh as mp_face_mesh
 import mediapipe.python.solutions.drawing_utils as mp_drawing
 import mediapipe.python.solutions.drawing_styles as mp_drawing_styles
 
-def landmark_to_dict(landmark_list):
-    landmark_dict = {}
-    for idx, landmark in enumerate(landmark_list):
-        landmark_dict[idx] = [landmark.x, landmark.y, landmark.z]
-
-    return landmark_dict
 
 def get_reference_dict(data_dir):
     image = cv2.imread(os.path.join(data_dir, 'reference_frame.png'))
@@ -146,6 +140,7 @@ def pose_normalization(args):
     data_dir = args.data_dir
     image_list = util.get_file_list(os.path.join(data_dir, 'crop'))
     reference_dict = get_reference_dict(data_dir)
+    torch.save(reference_dict, os.path.join(data_dir, 'reference_mesh.pt'))
     
     with mp_face_mesh.FaceMesh(
         max_num_faces=1,
@@ -177,18 +172,26 @@ def pose_normalization(args):
             if args.draw_norm_3d_mesh:
                 img_save_path = os.path.join(data_dir, 'mesh_norm_3d_image', os.path.basename(image_list[i])[:-4] + '.png')
                 draw_3d_mesh(target_dict, img_save_path, elevation=10, azimuth=10)
-            
+
+
+def create_dirs(opt):
+    os.makedirs(os.path.join(args.data_dir, 'mesh_dict'), exist_ok=True)
+    if opt.draw_mesh:
+        os.makedirs(os.path.join(args.data_dir, 'mesh_image'), exist_ok=True)
+    
+    if opt.draw_norm_mesh:
+        os.makedirs(os.path.join(args.data_dir, 'mesh_norm_image'), exist_ok=True)
+
+    if opt.draw_norm_3d_mesh:
+        os.makedirs(os.path.join(args.data_dir, 'mesh_norm_3d_image'), exist_ok=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--data_dir', type=str, default=None)
     parser.add_argument('--draw_mesh', type=bool, default=False)
-    parser.add_argument('--draw_norm_mesh', type=bool, default=True)
+    parser.add_argument('--draw_norm_mesh', type=bool, default=False)
     parser.add_argument('--draw_norm_3d_mesh', type=bool, default=False)
     args = parser.parse_args()
 
-    os.makedirs(os.path.join(args.data_dir, 'mesh_dict'), exist_ok=True)
-    os.makedirs(os.path.join(args.data_dir, 'mesh_image'), exist_ok=True)
-    os.makedirs(os.path.join(args.data_dir, 'mesh_norm_image'), exist_ok=True)
-    os.makedirs(os.path.join(args.data_dir, 'mesh_norm_3d_image'), exist_ok=True)
+    create_dirs(args)
     pose_normalization(args)

@@ -1,4 +1,16 @@
+import sys
+sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
+
+from audiodvp_utils import util
 import numpy as np
+import math
+import torch
+import os
+import mediapipe.python.solutions.face_mesh as mp_face_mesh
+import mediapipe.python.solutions.drawing_utils as mp_drawing
+import mediapipe.python.solutions.drawing_styles as mp_drawing_styles
+from tqdm import tqdm
+import cv2
 
 # Input :
 #       reference(dictionary from vertex idx to normalized landmark, dict[idx] = [x, y, z]) : landmark of reference frame.
@@ -42,10 +54,93 @@ def Umeyama_algorithm(reference, target):
     else: 
         if detuv < 0:
             S[m - 1, m - 1] = -1
-    S = np.identity(m)
+
     R = np.matmul(np.matmul(u, S), vh)
     c = (1 / tgt_var) * np.trace(np.matmul(np.diag(d), S))
     t = ref_mu.reshape(3, 1) - c * np.matmul(R, tgt_mu.reshape(3, 1))
 
     return R, t, c
 
+
+def landmark_to_dict(landmark_list):
+    landmark_dict = {}
+    for idx, landmark in enumerate(landmark_list):
+        landmark_dict[idx] = [landmark.x, landmark.y, landmark.z]
+
+    return landmark_dict
+
+def landmarkdict_to_normalized_mesh_tensor(landmark_dict):
+    vertex_list = []
+    for idx, coord in landmark_dict.items():
+        if (idx == 'R') or (idx == 't') or (idx == 'c'):
+            continue
+        vertex_list.append(coord)
+    
+    if not ('R' in landmark_dict):
+        return torch.tensor(vertex_list)
+    
+    R = torch.from_numpy(landmark_dict['R']).float()
+    t = torch.from_numpy(landmark_dict['t']).float()
+    c = float(landmark_dict['c'])
+    vertices = torch.tensor(vertex_list).transpose(0, 1)
+    norm_vertices = (c * torch.matmul(R, vertices) + t).transpose(0, 1)
+    return norm_vertices
+
+
+def landmarkdict_to_mesh_tensor(landmark_dict):
+    vertex_list = []
+    for idx, coord in landmark_dict.items():
+        if (idx == 'R') or (idx == 't') or (idx == 'c'):
+            continue
+        vertex_list.append(coord)
+
+    vertices = torch.tensor(vertex_list)
+    return vertices
+
+def mesh_tensor_to_landmarkdict(mesh_tensor):
+    landmark_dict = {}
+    for i in range(mesh_tensor.shape[0]):
+        landmark_dict[i] = mesh_tensor[i].tolist()
+    
+    return landmark_dict
+
+
+def draw_mesh_image(mesh_dict, save_path, image_rows, image_cols):
+    connections = mp_face_mesh.FACEMESH_TESSELATION
+    drawing_spec = mp_drawing.DrawingSpec(color= mp_drawing.BLACK_COLOR, thickness=1, circle_radius=1)
+
+    idx_to_coordinates = {}
+    for idx, coord in mesh_dict.items():
+        if (idx == 'R') or (idx == 't') or (idx == 'c'):
+            continue
+        x_px = min(math.floor(coord[0]), image_cols - 1)
+        y_px = min(math.floor(coord[1]), image_rows - 1)
+        landmark_px = (x_px, y_px)
+        if landmark_px:
+            idx_to_coordinates[idx] = landmark_px
+    
+    white_image = np.zeros([image_rows, image_cols, 3], dtype=np.uint8)
+    white_image[:] = 255
+    for connection in connections:
+        start_idx = connection[0]
+        end_idx = connection[1]
+
+        if start_idx in idx_to_coordinates and end_idx in idx_to_coordinates:
+            cv2.line(white_image, 
+                idx_to_coordinates[start_idx],
+                idx_to_coordinates[end_idx], 
+                drawing_spec.color,
+                drawing_spec.thickness
+            )
+    cv2.imwrite(save_path, white_image)
+
+
+def draw_mesh_images(mesh_dir, save_dir, image_rows, image_cols):
+    mesh_filename_list = util.get_file_list(mesh_dir)
+
+    for mesh_filename in tqdm(mesh_filename_list):
+        mesh_dict = torch.load(mesh_filename)
+        save_path = os.path.join(save_dir, os.path.basename(mesh_filename)[:-3] + '.png')
+        draw_mesh_image(mesh_dict, save_path, image_rows, image_cols)
+    
+    return

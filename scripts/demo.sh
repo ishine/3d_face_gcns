@@ -43,7 +43,7 @@ end_time="240"
 #     --vertical_adjust 0.2
 
 # pose normalization
-python lipsync3d/pose_normalization.py --data_dir $target_dir
+# python lipsync3d/pose_normalization.py --data_dir $target_dir
 
 # # 3D face reconstruction
 # python train.py \
@@ -126,9 +126,10 @@ python lipsync3d/pose_normalization.py --data_dir $target_dir
 # mkdir -p $source_dir/results
 
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+#     -thread_queue_size 8192 -i $source_dir/mesh_image/%05d.png \
 #     -thread_queue_size 8192 -i $source_dir/mesh_norm_image/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/mesh_normalization_identity.mp4
+#     -i $source_dir/audio/audio.wav \
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/mesh_normalization_identity.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
