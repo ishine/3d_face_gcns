@@ -12,11 +12,13 @@ from audiodvp_utils.rescale_image import rescale_and_paste
 if __name__ == '__main__':
     opt = Options().parse_args()
 
-    create_dir(os.path.join(opt.src_dir, 'reenact'))
-
-    alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
+    # create_dir(os.path.join(opt.src_dir, 'reenact'))
+    create_dir(os.path.join(opt.src_dir, 'reenact_from_mesh'))
+    alpha = torch.load(os.path.join(opt.tgt_dir, 'reference_alpha.pt')).unsqueeze(0).cuda()
+    # alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
     beta_list = load_coef(os.path.join(opt.tgt_dir, 'beta'))
-    delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_delta'))
+    delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_delta_from_mesh'))
+    # delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_delta'))
     # delta_list = load_coef(os.path.join(opt.src_dir, 'delta'))
     gamma_list = load_coef(os.path.join(opt.tgt_dir, 'gamma'))
     angle_list = load_coef(os.path.join(opt.tgt_dir, 'rotation'))
@@ -31,14 +33,16 @@ if __name__ == '__main__':
 
     top, bottom, left, right = get_max_crop_region(crop_region_list)
 
-    for i in tqdm(range(min(len(delta_list), len(alpha_list)))):
-        alpha = alpha_list[i + opt.offset].unsqueeze(0).cuda()
-        beta = beta_list[i + opt.offset].unsqueeze(0).cuda()
+    for i in tqdm(range(min(len(delta_list), len(beta_list)))):
+        # alpha = alpha_list[i + opt.offset].unsqueeze(0).cuda()
+        # beta = beta_list[i + opt.offset].unsqueeze(0).cuda()
+        beta = torch.zeros((1, 80, 1)).cuda()
         delta = delta_list[i].unsqueeze(0).cuda()
         gamma = gamma_list[i + opt.offset].unsqueeze(0).cuda()
         rotation = angle_list[i + opt.offset].unsqueeze(0).cuda()
         translation = translation_list[i + opt.offset].unsqueeze(0).cuda()
-        face_emb = face_emb_list[i].unsqueeze(0).cuda()
+        # face_emb = face_emb_list[i].unsqueeze(0).cuda()
+        face_emb = None
         crop_region = crop_region_list[i]
         full_image = cv2.imread(full_image_list[i])
         H, W, _ = full_image.shape
@@ -50,4 +54,4 @@ if __name__ == '__main__':
         rescaled_render = cv2.cvtColor(rescaled_render, cv2.COLOR_RGB2BGR)
         rescaled_render = rescaled_render[top:bottom, left:right]
         rescaled_render = cv2.resize(rescaled_render, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(os.path.join(opt.src_dir, 'reenact', os.path.basename(full_image_list[i])), rescaled_render)
+        cv2.imwrite(os.path.join(opt.src_dir, 'reenact_from_mesh', os.path.basename(full_image_list[i])), rescaled_render)

@@ -31,8 +31,9 @@ if __name__ == '__main__':
     criterionTex = L1Loss()
     ckpt = torch.load(os.path.join(opt.tgt_dir, 'Lipsync3dnet.pth'), map_location=device)
     model.load_state_dict(ckpt)
-    os.makedirs(os.path.join(opt.src_dir, 'reenact_mesh'), exist_ok=True)
+    # os.makedirs(os.path.join(opt.src_dir, 'reenact_mesh'), exist_ok=True)
     os.makedirs(os.path.join(opt.src_dir, 'reenact_mesh_image'), exist_ok=True)
+    os.makedirs(os.path.join(opt.src_dir, 'reenact_norm_mesh'), exist_ok=True)
     
     avg_loss = 0
     with torch.no_grad():
@@ -56,18 +57,21 @@ if __name__ == '__main__':
                 geoLoss = criterionGeo(geometry, normalized_mesh)
                 avg_loss += geoLoss.detach() / int(len(test_dataloader) * (1 - opt.train_rate))
 
-            geometry = geometry[0].transpose(0, 1)
-            geometry = (torch.matmul(RT, (geometry - t)) / c).transpose(0, 1).cpu().detach()
+            norm_geometry = geometry[0].transpose(0, 1)
+            geometry = (torch.matmul(RT, (norm_geometry - t)) / c).transpose(0, 1).cpu().detach()
+            norm_geometry = norm_geometry.transpose(0, 1).cpu().detach()
+            norm_landmark_dict = mesh_tensor_to_landmarkdict(norm_geometry)
             landmark_dict = mesh_tensor_to_landmarkdict(geometry)
 
-            torch.save(landmark_dict, os.path.join(opt.src_dir, 'reenact_mesh', filename))
+            # torch.save(landmark_dict, os.path.join(opt.src_dir, 'reenact_mesh', filename))
+            torch.save(norm_landmark_dict, os.path.join(opt.src_dir, 'reenact_norm_mesh', filename))
     
-    if calculate_test_loss:
-        print('Average Test loss : ', avg_loss)
+    # if calculate_test_loss:
+    #     print('Average Test loss : ', avg_loss)
 
-    print('Start drawing reenact mesh')
+    # print('Start drawing reenact mesh')
     image = cv2.imread(os.path.join(opt.tgt_dir, 'reference_frame.png'))
     image_rows, image_cols, _ = image.shape
-    draw_mesh_images(os.path.join(opt.src_dir, 'reenact_mesh'), os.path.join(opt.src_dir, 'reenact_mesh_image'), image_rows, image_cols)
+    draw_mesh_images(os.path.join(opt.src_dir, 'reenact_norm_mesh'), os.path.join(opt.src_dir, 'reenact_mesh_image'), image_rows, image_cols)
             
 

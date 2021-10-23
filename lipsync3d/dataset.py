@@ -9,6 +9,7 @@ from utils import landmarkdict_to_normalized_mesh_tensor, landmarkdict_to_mesh_t
 from audiodvp_utils import util
 from torch.utils.data import Dataset
 
+
 class Lipsync3DDataset(Dataset):
     def __init__(self, opt):
         self.opt = opt
@@ -74,4 +75,52 @@ class Lipsync3DDataset(Dataset):
             return {
                 'audio_feature': audio_feature, 'filename': filename,
                 'reference_mesh' : self.reference_mesh, 'normalized_mesh': normalized_mesh 
+            }
+
+
+class Landmark2BFMDataset(Dataset):
+    def __init__(self, opt):
+        self.opt = opt
+        self.mesh_dir = opt.mesh_dir
+        self.mesh_dict_list = util.load_coef(self.mesh_dir)
+        self.filenames = util.get_file_list(self.mesh_dir)
+
+        if opt.isTrain:
+            self.bfm_dir = opt.bfm_dir
+            self.alpha_list = util.load_coef(os.path.join(self.bfm_dir, 'alpha'))
+            self.delta_list = util.load_coef(os.path.join(self.bfm_dir, 'delta'))
+            
+            minlen = len(self.mesh_dict_list)
+            train_idx = int(minlen * self.opt.train_rate)
+            self.mesh_dict_list = self.mesh_dict_list[:train_idx]
+            self.filenames = self.filenames[:train_idx]
+        
+        print('training set size: ', len(self.filenames))
+
+
+    def __len__(self):
+        return len(self.filenames)
+
+    def __getitem__(self, index):
+
+        filename = os.path.basename(self.filenames[index])
+
+        if not self.opt.isTrain:
+            landmark_dict = self.mesh_dict_list[index]
+            normalized_mesh = landmarkdict_to_normalized_mesh_tensor(landmark_dict)
+
+            return {'filename': filename, 
+                    'normalized_mesh': normalized_mesh}
+        else:
+            landmark_dict = self.mesh_dict_list[index]
+            normalized_mesh = landmarkdict_to_normalized_mesh_tensor(landmark_dict)
+
+            alpha = self.alpha_list[index]
+            delta = self.delta_list[index]
+
+            return {
+                'filename': filename,
+                'normalized_mesh': normalized_mesh,
+                'alpha': alpha,
+                'delta': delta
             }

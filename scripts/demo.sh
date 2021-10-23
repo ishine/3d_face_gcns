@@ -5,9 +5,9 @@ set -ex
 # source_dir : directory for inference data, put test audio in source_dir/audio directory
 # video_dir : path for training video
 
-target_dir="data/kkj/kkj04_lipsync3d"
-source_dir="data/kkj/kkj04_lipsync3d"
-video_dir="data/kkj/kkj04_lipsync3d/KKJ_slow_04_stand.mp4"
+target_dir="data/kkj/kkj04"
+source_dir="data/kkj/kkj_last"
+# video_dir="data/kkj/kkj04_lipsync3d/KKJ_slow_04_stand.mp4"
 
 
 # set video clip duration
@@ -115,7 +115,7 @@ end_time="240"
 #     --use_refine \
 #     --name nfr \
 #     --checkpoints_dir $target_dir/ckpts \
-#     --dataroot $source_dir/reenact \
+#     --dataroot $source_dir/reenact_from_mesh \
 #     --results_dir $source_dir \
 #     --epoch $epoch
 
@@ -126,10 +126,10 @@ end_time="240"
 # mkdir -p $source_dir/results
 
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/mesh_image/%05d.png \
-#     -thread_queue_size 8192 -i $source_dir/mesh_norm_image/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/images/%05d_real.png \
+#     -thread_queue_size 8192 -i $source_dir/images/%05d_fake.png \
 #     -i $source_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/mesh_normalization_identity.mp4
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/reenact_tgt_kkj04_src_kkj00_modify_dataset.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
@@ -138,7 +138,12 @@ end_time="240"
 #     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/debug.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
+#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
 #     -thread_queue_size 8192 -i $target_dir/full/%05d.png \
-#     -thread_queue_size 8192 -i $target_dir/comp/%05d.png \
-#     -i $target_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/inference_kkj03.mp4
+#     -i $source_dir/audio/audio.wav \
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/render_kkjlast_origin.mp4
+
+# ffmpeg -y -loglevel warning \
+#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+#     -thread_queue_size 8192 -i $source_dir/reenact_from_mesh/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/reenact_mesh_tgt_kkj04_src_kkjlast.mp4

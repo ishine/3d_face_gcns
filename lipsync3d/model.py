@@ -1,6 +1,19 @@
 import torch
 import torch.nn as nn
 
+
+def weights_init(m):
+    classname = m.__class__.__name__
+    if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+        torch.nn.init.xavier_normal_(m.weight.data, gain=torch.nn.init.calculate_gain('relu'))
+
+        if hasattr(m, 'bias') and m.bias is not None:
+            torch.nn.init.zeros_(m.bias.data)
+
+    elif classname.find('BatchNorm2d') != -1:
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.zeros_(m.bias.data)
+
 class View(nn.Module):
     def __init__(self, shape):
         super(View, self).__init__()
@@ -104,3 +117,28 @@ class Lipsync3DModel(nn.Module):
 
         # return geometry_diff, texture_diff
         return geometry_diff
+
+
+class landmark_to_BFM(nn.Module):
+    def __init__(self):
+        super(landmark_to_BFM, self).__init__()
+
+        self.model = nn.Sequential(
+            nn.Linear(478*3, 478*3),
+            nn.ReLU(),
+            nn.Linear(478*3, 717),
+            nn.ReLU(),
+            nn.Linear(717, 358),
+            nn.ReLU(),
+            nn.Linear(358, 180),
+            nn.ReLU(),
+        )
+
+        self.fc = nn.Linear(180, 64)
+        self.apply(weights_init)
+        torch.nn.init.zeros_(self.fc.weight)
+        torch.nn.init.zeros_(self.fc.bias)
+
+    def forward(self, x):
+        out = self.fc(self.model(x))
+        return out
