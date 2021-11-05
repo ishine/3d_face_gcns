@@ -13,3 +13,4 @@ lipsync_expert.pth
 deepspeech-0.9.3-models.pbmm
 deepspeech-0.9.3-models.scorer
 output_graph.pb
+test_image_*.png

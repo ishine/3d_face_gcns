@@ -100,27 +100,27 @@ end_time="240"
 # python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
 # choose best epoch with lowest loss
-# epoch=25
+epoch=25
 
 # neural rendering the reenact face sequence
-# python vendor/neural_face_renderer/test.py --model test \
-#     --netG unet_256 \
-#     --direction BtoA \
-#     --dataset_mode temporal_single \
-#     --norm batch \
-#     --input_nc 21 \
-#     --Nw 7 \
-#     --preprocess none \
-#     --eval \
-#     --use_refine \
-#     --name nfr \
-#     --checkpoints_dir $target_dir/ckpts \
-#     --dataroot $source_dir/reenact_from_mesh \
-#     --results_dir $source_dir \
-#     --epoch $epoch
+python vendor/neural_face_renderer/test.py --model test \
+    --netG unet_256 \
+    --direction BtoA \
+    --dataset_mode temporal_single \
+    --norm batch \
+    --input_nc 21 \
+    --Nw 7 \
+    --preprocess none \
+    --eval \
+    --use_refine \
+    --name nfr \
+    --checkpoints_dir $target_dir/ckpts \
+    --dataroot $source_dir/reenact \
+    --results_dir $source_dir \
+    --epoch $epoch
 
 # composite lower face back to original video
-# python comp.py --src_dir $source_dir --tgt_dir $target_dir
+python comp.py --src_dir $source_dir --tgt_dir $target_dir
 
 # create final result
 # mkdir -p $source_dir/results
@@ -143,7 +143,7 @@ end_time="240"
 #     -i $source_dir/audio/audio.wav \
 #     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/render_kkjlast_origin.mp4
 
-# ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $source_dir/reenact_from_mesh/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/reenact_mesh_tgt_kkj04_src_kkjlast.mp4
+ffmpeg -y -loglevel warning \
+    -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+    -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+    -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/render_audio2geometry_478.mp4

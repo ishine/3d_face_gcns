@@ -10,7 +10,7 @@ import argparse
 import math
 from tqdm import tqdm
 import torch
-from utils import landmark_to_dict
+from lipsync3d.utils import landmark_to_dict
 import numpy as np
 import cv2
 import mediapipe as mp

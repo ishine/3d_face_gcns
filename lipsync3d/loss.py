@@ -1,8 +1,15 @@
+import sys
+sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
+
 import torch
 import torch.nn as nn
 import scipy.io as sio
-import sys
-sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
+from renderer.face_model import FaceModel
+from lib.mesh_io import read_obj
+from gcn_util.utils import init_sampling
+from lipsync3d.utils import get_downsamp_trans
+import os
+import numpy as np
 
 class L2Loss(nn.Module):
     def __init__(self):
@@ -21,6 +28,31 @@ class L1Loss(nn.Module):
     def forward(self, input, target):
         
         return (torch.abs(input - target)).mean()
+
+class WeightedMSELoss(nn.Module):
+    def __init__(self, opt):
+        super(WeightedMSELoss, self).__init__()
+        downsamp_trans = get_downsamp_trans()
+
+        mat_data = sio.loadmat(opt.matlab_data_path)
+        geo_mean = torch.from_numpy(mat_data['geo_mean']).reshape(-1, 3)
+        exp_base = torch.from_numpy(mat_data['exp_base'])
+        geo_mean = torch.mm(downsamp_trans, geo_mean)
+
+        mouth_vertex_list = []
+    
+        for i in range(geo_mean.shape[0]):  # 2232
+            if geo_mean[i, 1] < 0.:  # y coordinate
+                mouth_vertex_list.append(i)
+
+        weight = torch.ones((478))
+        weight[mouth_vertex_list] = 50.
+        self.weight = weight.reshape(-1, 1).to(opt.device)
+
+    
+    def forward(self, input, target):
+        
+        return (self.weight * (input - target) ** 2).mean()
 
 class calculate_geoLoss(nn.Module):
     def __init__(self, opt):
@@ -59,3 +91,66 @@ class calculate_geoLoss(nn.Module):
 
         return l2_loss
 
+    # def forward(self, alpha, delta, reference_alpha, delta_pred):
+    #     geo_gt = self.id_base.bmm(alpha) + self.exp_base.bmm(delta)
+    #     geo_gt = geo_gt.reshape(-1, 35709, 3)
+    #     geo_land_gt = geo_gt[:, self.landmark_index]
+
+    #     geo_pred = self.id_base.bmm(reference_alpha).reshape(-1, 35709, 3) + delta_pred
+    #     geo_land_pred = geo_pred[:, self.landmark_index]
+
+    #     l2_loss = (geo_gt - geo_pred) ** 2
+    #     land_l2_loss = (geo_land_gt - geo_land_pred) ** 2
+
+    #     l2_loss = torch.sum(l2_loss) / 35709.0
+    #     land_l2_loss = torch.sum(self.landmark_weight * land_l2_loss) / 68.0
+        
+
+    #     return l2_loss, land_l2_loss
+
+
+class calculate_photo_land_Loss(nn.Module):
+    def __init__(self, opt):
+        super(calculate_photo_land_Loss, self).__init__()
+        self.device = opt.device
+        self.face_model = FaceModel(opt=opt, batch_size=opt.batch_size, load_model=True)
+        self.photometricLoss = torch.nn.MSELoss()
+        self.landmarkLoss = LandmarkLoss(opt)
+
+    def forward(self, alpha, beta, delta, gamma, angle, translation, face_emb, reference_alpha, reference_beta, delta_pred, reference_face_emb, face_landmark_gt):
+        
+        render_image_gt, _, _, _, _ = self.face_model(alpha, delta, beta, angle, translation, gamma, face_emb, is_train=False)
+        render_image_pred, _, landmark_pred, _, _ = self.face_model(reference_alpha, delta_pred, reference_beta, angle, translation, gamma, face_emb, is_train=False)
+
+        return self.photometricLoss(render_image_gt, render_image_pred), self.landmarkLoss(landmark_pred, face_landmark_gt)
+
+class LandmarkLoss(nn.Module):
+    def __init__(self, opt):
+        super(LandmarkLoss, self).__init__()
+
+        self.device = opt.device
+
+        self.landmark_weight = torch.tensor([[
+                1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
+                50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
+                1.0,  1.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0,
+                50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0,
+        ]], device=self.device).unsqueeze(-1)
+
+    def forward(self, landmark, landmark_gt):
+        landmark_loss = (landmark - landmark_gt) ** 2
+        # landmark_loss = torch.sum(self.landmark_weight * landmark_loss) / 68.0
+        landmark_loss = torch.mean(self.landmark_weight * landmark_loss)
+
+        return landmark_loss
+
+
+class FaceembLoss(nn.Module):
+    def __init__(self):
+        super(FaceembLoss, self).__init__()
+        self.cos = nn.CosineSimilarity(dim=1, eps=1e-8)
+
+    def forward(self, face_emb, face_emb_pred):
+        cos = torch.sum(1.0 - self.cos(face_emb, face_emb_pred))
+
+        return cos

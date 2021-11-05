@@ -12,10 +12,12 @@ class Options:
         self.parser.add_argument('--mesh_dir', type=str, default=None)
         self.parser.add_argument('--matlab_data_path', type=str, default='renderer/data/data.mat')
 
-        self.parser.add_argument('--lambda_alpha', type=float, default=1.0)
         self.parser.add_argument('--lambda_delta', type=float, default=1.0)
-        self.parser.add_argument('--lambda_land', type=float, default=1.6e-1)
+        self.parser.add_argument('--lambda_land', type=float, default=1.6e-0)
+        self.parser.add_argument('--lambda_photo', type=float, default=0)
         self.parser.add_argument('--lambda_reg', type=float, default=3e-4)
+        self.parser.add_argument('--lambda_geo', type=float, default=5e-2)
+        self.parser.add_argument('--lambda_face_emb', type=float, default=1e-2)
 
         self.parser.add_argument('--train_rate', type=float, default=0.8)
         self.parser.add_argument('--num_epoch', type=int, default=500)
@@ -24,10 +26,9 @@ class Options:
         self.parser.add_argument('--num_workers', type=int, default=4)
         self.parser.add_argument('--isTrain', type=self.str2bool, default=True)
         self.parser.add_argument('--lr', type=float, default=2e-5, help='initial learning rate for adam')
-        self.parser.add_argument('--lr_decay', type=float, default=0.94)
+        self.parser.add_argument('--lr_decay', type=float, default=0.9)
         self.parser.add_argument('--lr_decay_step', type=float, default=2)
 
-        self.parser.add_argument('--lambda_geo', type=float, default=0.3)
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
         self.parser.add_argument('--display_port', type=int, default=11111, help='tensorboard port of the web display')

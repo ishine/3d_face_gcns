@@ -10,19 +10,16 @@ from .renderer import Renderer
 from .mesh_refiner import MeshRefinementModel
 
 class FaceModel(nn.Module):
-    def __init__(self, opt, batch_size, image_width=256, image_height=256, load_model=False):
+    def __init__(self, opt, batch_size, image_width=256, image_height=256, load_model=False, downsamp_tran=None):
         super(FaceModel, self).__init__()
         self.mat_data = sio.loadmat(opt.matlab_data_path)
-        self.skin_mask = sio.loadmat(opt.skin_mask_path)['face05_4seg'][:, 0]
-        self.face_id = sio.loadmat(opt.face_id_path)['select_id'][:, 0] - 1
-        self.skin_mask = self.skin_mask[self.face_id]
-        self.skin_index = np.where(self.skin_mask == 3)[0]
 
         self.batch_size = batch_size
         self.device = torch.device('cuda')
 
         self.image_width = image_width
         self.image_height = image_height
+        self.downsamp_tran = downsamp_tran.cuda() if downsamp_tran != None else None
 
         self.load_data()
 
@@ -105,8 +102,35 @@ class FaceModel(nn.Module):
         screen_vertices = ((clip_vertices[:, :, :2] / clip_vertices[:, :, 3:]) + 1) * self.image_height * 0.5
 
         return screen_vertices
+    
 
-    def forward(self, alpha, delta, beta, rotation, translation, gamma, face_emb=None, lower=False):
+    def downsampled_landmarks(self, alpha, delta, rotation, translation):
+        if delta.shape[1] == 64:
+            geo = self.geo_mean + self.id_base.bmm(alpha) + self.exp_base.bmm(delta)
+            geo = geo.reshape(-1, 3)
+        else:
+            geo = self.geo_mean + self.id_base.bmm(alpha)
+            geo = geo.reshape(-1, 3)
+            geo = torch.mm(self.downsamp_tran, geo).reshape(1, -1, 3) + delta
+
+        model2world = euler_matrices(rotation).permute(0, 2, 1)  # R^(-1)
+        geo = torch.matmul(geo - translation.permute(0, 2, 1), model2world)  # R^(-1)(V-t)
+        clip_vertices = self.transform_to_clip_space(geo)
+        landmarks = self.transform_to_screen_space(clip_vertices)[0]
+
+        return landmarks
+    
+    def geometry_to_pixel(self, geo, rotation, translation):
+        # geo : (B x 478 x 3)
+        # landmarks : (B x 478 x 2)
+
+        model2world = euler_matrices(rotation).permute(0, 2, 1)
+        geo = torch.matmul(geo - translation.permute(0, 2, 1), model2world)
+        clip_vertices = self.transform_to_clip_space(geo)
+        landmarks = self.transform_to_screen_space(clip_vertices)
+        return landmarks
+
+    def forward(self, alpha, delta, beta, rotation, translation, gamma, face_emb=None, lower=False, is_train=True):
         geo, tex = self.build_face_model(alpha, delta, beta)
         norm = self.calc_norm(geo)
         geo, norm = self.transform_to_world_space(geo, norm, rotation, translation)
@@ -114,10 +138,15 @@ class FaceModel(nn.Module):
         screen_vertices = self.transform_to_screen_space(clip_vertices)
 
         landmarks = screen_vertices[:, self.landmark_index]
+
         if face_emb == None:
             refined_tex = tex
         else:
-            refined_tex = self.refiner(face_emb, tex)
+            if is_train:
+                refined_tex = self.refiner(face_emb, tex)
+            else:
+                with torch.no_grad():
+                    refined_tex = self.refiner(face_emb, tex)
 
         if not lower:
             render_image, alpha_mask = self.renderer(clip_vertices, self.triangles, norm, refined_tex, gamma)

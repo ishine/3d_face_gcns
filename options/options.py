@@ -54,7 +54,8 @@ class Options:
 
         self.parser.add_argument('--test_num', type=int, default=10000)
         self.parser.add_argument('--gt_pose', type=self.str2bool, default=False)
-        self.parser.add_argument('--offset', type=int, default=0)
+        self.parser.add_argument('--offset_start', type=int, default=8172)
+        self.parser.add_argument('--offset_end', type=int, default=8290)
 
         # sycnet training parameters
         self.parser.add_argument('--fps', type=int, default=25)

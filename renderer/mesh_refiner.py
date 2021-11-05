@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
 import torch
 import torch.nn as nn
 from torch.nn import Parameter
@@ -5,7 +7,7 @@ import numpy as np
 import scipy.sparse as sp
 from lib.mesh_io import read_obj
 import os
-import utils
+from gcn_util.utils import init_sampling
 from lib import graph
 
 class ChebConv(nn.Module):
@@ -84,7 +86,7 @@ class MeshRefinementModel(nn.Module):
         super(MeshRefinementModel, self).__init__()
         self.device = torch.device('cuda')
         self.refer_mesh = read_obj(os.path.join('renderer', 'data', 'bfm09_face_template.obj'))
-        self.laplacians, self.downsamp_trans, self.upsamp_trans, self.pool_size = utils.init_sampling(
+        self.laplacians, self.downsamp_trans, self.upsamp_trans, self.pool_size = init_sampling(
         self.refer_mesh, os.path.join('renderer', 'data', 'params', 'bfm09_face'), 'bfm09_face')
         self.laplacians = [(torch.FloatTensor(np.array(laplacian.todense())) - torch.diag(torch.ones(laplacian.shape[0]))).to_sparse().to(self.device) for laplacian in self.laplacians]
         self.downsamp_trans = [torch.FloatTensor(np.array(downsamp_tran.todense())).to_sparse().to(self.device) for downsamp_tran in self.downsamp_trans]

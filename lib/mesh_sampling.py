@@ -7,7 +7,7 @@ from random import choice
 import numpy as np
 import scipy.sparse as sp
 
-import utils
+from gcn_util import utils
 from lib.mesh_io import write_obj
 from tqdm import tqdm
 

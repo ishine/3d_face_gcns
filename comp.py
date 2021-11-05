@@ -23,8 +23,10 @@ if __name__ == '__main__':
     H, W, _ = cv2.imread(backgrounds[0]).shape
 
     for i in tqdm(range(len(foregrounds))):
+        idx = i % (opt.offset_end - opt.offset_start ) + opt.offset_start
+
         fg = cv2.imread(foregrounds[i])
-        bg = cv2.imread(backgrounds[i + opt.offset])
+        bg = cv2.imread(backgrounds[idx])
         empty_img = np.zeros((H, W, 3), np.uint8)
         rescaled_fg = rescale_and_paste(crop_region, empty_img, fg)
 
@@ -38,7 +40,7 @@ if __name__ == '__main__':
         
         cover_img = mask_fg * rescaled_fg + (1 - mask_fg) * bg
     
-        mask = cv2.imread(masks[i + opt.offset])
+        mask = cv2.imread(masks[idx])
         empty_mask = np.zeros((H, W, 3), np.uint8)
         rescaled_mask = rescale_and_paste(crop_region, empty_mask, mask)
         rescaled_mask = cv2.erode(rescaled_mask, np.ones((3,3), np.uint8), iterations=5)

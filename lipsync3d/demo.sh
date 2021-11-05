@@ -10,7 +10,7 @@ mesh_dir="data/kkj/kkj04_lipsync3d/mesh_dict"
 reenact_mesh_dir="data/kkj/kkj04_lipsync3d/reenact_norm_mesh"
 target_dir="data/kkj/kkj04_lipsync3d"
 source_dir="data/kkj/kkj_last"
-video_dir="data/kkj/kkj_last/kkj_last.mp4"
+# video_dir="data/kkj/TTS_E/a-cough-nose.mp4"
 
 
 # set video clip duration
@@ -64,7 +64,7 @@ end_time="240"
 #     --tgt_dir $target_dir \
 #     --mesh_dir $mesh_dir \
 #     --num_epoch 50 \
-#     --batch_size 128
+#     --batch_size 32 
 
 # python lipsync3d/test_landmark2BFM.py \
 #     --batch_size 1 \
@@ -73,15 +73,29 @@ end_time="240"
 #     --tgt_dir $target_dir \
 #     --src_dir $source_dir
 
-# python reenact.py --src_dir $source_dir --tgt_dir $bfm_dir
+# python lipsync3d/train_audio2BFM.py \
+#     --tgt_dir $bfm_dir \
+#     --src_dir $bfm_dir \
+#     --num_epoch 50 \
+#     --batch_size 32 \
+#     --gpu_ids 0 
+
+# python lipsync3d/test_audio2BFM.py \
+#     --batch_size 1 \
+#     --serial_batches False \
+#     --isTrain False \
+#     --tgt_dir $bfm_dir \
+#     --src_dir $source_dir
+
+python reenact.py --src_dir $source_dir --tgt_dir $bfm_dir
 
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/reenact_from_mesh/%05d.png \
-#     -thread_queue_size 8192 -i $source_dir/reenact_mesh_image/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/reenact_bfm_mesh/%05d.png \
 #     -i $source_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -shortest -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/reenact_tgt_kkj04_src_kkj00_compare_1.6e-1.mp4
+#     -filter_complex hstack=inputs=2 -shortest -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/reenact_audio2geometry_478.mp4
 
-ffmpeg -y -loglevel warning \
-    -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-    -thread_queue_size 8192 -i $source_dir/reenact_from_mesh/%05d.png \
-    -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/mesh_predict_test_beta_zero.mp4
+# ffmpeg -y -loglevel warning \
+#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+#     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/reenact_audio2geometry_2232.mp4
