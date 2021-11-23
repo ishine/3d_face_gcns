@@ -11,6 +11,9 @@ import mediapipe.python.solutions.drawing_utils as mp_drawing
 import mediapipe.python.solutions.drawing_styles as mp_drawing_styles
 from tqdm import tqdm
 import cv2
+import pickle
+from lipsync3d import lpc
+import librosa
 
 # Input :
 #       reference(dictionary from vertex idx to normalized landmark, dict[idx] = [x, y, z]) : landmark of reference frame.
@@ -89,8 +92,11 @@ def landmarkdict_to_normalized_mesh_tensor(landmark_dict):
 
 def landmarkdict_to_mesh_tensor(landmark_dict):
     vertex_list = []
+    face_oval = get_face_oval_indices()
     for idx, coord in landmark_dict.items():
         if (idx == 'R') or (idx == 't') or (idx == 'c'):
+            continue
+        if idx in face_oval:
             continue
         vertex_list.append(coord)
 
@@ -145,16 +151,28 @@ def draw_mesh_images(mesh_dir, save_dir, image_rows, image_cols):
     
     return
 
-def get_downsamp_trans():
-    # refer_mesh = read_obj(os.path.join('renderer', 'data', 'bfm09_face_template.obj'))
-    # _, downsamp_trans, upsamp_trans, _ = init_sampling(
-    # refer_mesh, os.path.join('renderer', 'data', 'params', 'bfm09_face'), 'bfm09_face')
+def get_face_oval_indices():
+    face_oval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 
+            176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109]  # 36
+    return face_oval
 
-    # downsamp_trans = [torch.FloatTensor(np.array(downsamp_tran.todense())) for downsamp_tran in downsamp_trans[:3]]
-    # downsamp_trans = torch.mm(torch.mm(downsamp_trans[2], downsamp_trans[1]), downsamp_trans[0]).to_sparse()
-    # downsamp_trans = torch.mm(downsamp_trans[1], downsamp_trans[0]).to_sparse()
+
+def downsamp_mediapipe_mesh(mediapipe_mesh):
+    face_oval = get_face_oval_indices()
     
-    indices = [8095, 8193, 8202, 8542, 8191, 8186, 8169, 13301, 8143, 8129, 29880, 8098, 8102, 8105, 8108, 8110, 8113, 8115, 8241, 8196, 
+    mediapipe_mesh = mediapipe_mesh.tolist()
+    downsamp_mesh = []
+    for i in range(len(mediapipe_mesh)):
+        if i in face_oval:
+            continue
+        downsamp_mesh.append(mediapipe_mesh[i])
+    
+    return torch.tensor(downsamp_mesh)
+
+def get_downsamp_trans():
+    # output: 442 x 35709
+    
+    old_indices = [8095, 8193, 8202, 8542, 8191, 8186, 8169, 13301, 8143, 8129, 29880, 8098, 8102, 8105, 8108, 8110, 8113, 8115, 8241, 8196, 
                 8921, 24308, 11371, 12016, 12532, 13691, 10854, 11603, 10960, 12377, 13153, 14599, 34011, 13815, 23572, 16141, 11917, 9175, 
                 8823, 10142, 10655, 9544, 10151, 10933, 8434, 8431, 14178, 10354, 11016, 11013, 13852, 8427, 11593, 12756, 31364, 9333, 10448, 
                 11824, 27580, 9757, 9521, 10667, 10410, 31060, 11148, 30459, 30455, 30442, 31229, 30421, 14818, 23014, 9058, 9780, 10274, 9759, 
@@ -178,10 +196,116 @@ def get_downsamp_trans():
                 7696, 6374, 7526, 4890, 4718, 5800, 3557, 4338, 2795, 33738, 5607, 4382, 33468, 3975, 21824, 2821, 18742, 3831, 6369, 6994, 5746, 
                 7351, 6203, 5295, 4391, 3488, 2330, 804, 19848, 2234, 3139, 4170, 4941, 5584, 6098, 18692, 5490, 7102, 7356, 7481, 7120, 5750, 7721, 
                 7841, 6467, 6593, 6839, 2215, 1950, 11747, 10973, 11480, 12391, 11755, 4409, 3505, 4529, 5054, 4288]
+    
+    face_oval = get_face_oval_indices()
 
-    downsamp_trans = torch.zeros((len(indices), 35709)) # 478 x 35709
+    new_indices = []
+    for i in range(len(old_indices)):
+        if i in face_oval:
+            continue
+        new_indices.append(old_indices[i])
+        
+    downsamp_trans = torch.zeros((len(new_indices), 35709)) # 478 x 35709
 
-    for i in range(len(indices)):
-        downsamp_trans[i, indices[i]] = 1
+    for i in range(len(new_indices)):
+        downsamp_trans[i, new_indices[i]] = 1
     
     return downsamp_trans
+
+    
+def normalized_to_pixel_coordinates(landmark_dict, image_width, image_height):
+    def is_valid_normalized_value(value):
+        return (value > 0 or math.isclose(0, value)) and (value < 1 or math.isclose(1, value))
+
+    landmark_pixel_coord_dict = {}
+
+    for idx, coord in landmark_dict.items():
+        if (idx == 'R') or (idx == 't') or (idx == 'c'):
+            continue
+
+        if not (is_valid_normalized_value(coord[0]) and
+                is_valid_normalized_value(coord[1])):
+            # TODO: Draw coordinates even if it's outside of the image bounds.
+            return None
+        x_px = coord[0] * image_width
+        y_px = coord[1] * image_height
+        z_px = coord[2] * image_width
+        landmark_pixel_coord_dict[idx] = [x_px, y_px, z_px]
+    return landmark_pixel_coord_dict
+
+
+def load_mediapipe_mesh_dict(target_dir):
+    mediapipe_mesh_dict_path = os.path.join(target_dir, 'mediapipe_mesh.pkl')
+
+    if not os.path.exists(mediapipe_mesh_dict_path):
+        image_list = util.get_file_list(os.path.join(target_dir, 'crop'))
+        
+        mediapipe_mesh_dict = {}
+        with mp_face_mesh.FaceMesh(
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5) as face_mesh:
+
+            for i in tqdm(range(len(image_list))):
+                image = cv2.imread(image_list[i])
+                annotated_image = image.copy()
+                image_rows, image_cols, _ = image.shape
+                results = face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+                target_dict = landmark_to_dict(results.multi_face_landmarks[0].landmark)
+                target_dict = normalized_to_pixel_coordinates(target_dict, image_cols, image_rows)
+                target_dict = landmarkdict_to_mesh_tensor(target_dict)
+                mediapipe_mesh_dict[i] = target_dict[:, :2] # 442 x 2
+    
+        with open(mediapipe_mesh_dict_path, 'wb') as f:
+            pickle.dump(mediapipe_mesh_dict, f)
+
+    with open(mediapipe_mesh_dict_path, 'rb') as f:
+        mediapipe_mesh_dict = pickle.load(f)
+
+    return mediapipe_mesh_dict
+
+
+def get_autocorrelation_coefficients(src_dir):
+    save_path = os.path.join(src_dir, 'audio/audio_autocorrelation.pt')
+    audio_path = os.path.join(src_dir, 'audio/audio.wav')
+    
+    if os.path.exists(save_path):
+        return torch.load(save_path)
+        
+    waveform, sampleRate = librosa.load(audio_path, 16000, mono=False)
+    waveform = torch.from_numpy(waveform)
+        
+    audioFrameLen = int(.008 * 16000 * (64 + 1))
+    LPC = lpc.LPCCoefficients(
+        sampleRate,
+        .016,
+        .5,
+        order=31  # 32 - 1
+    )
+
+    autocorrelation_coefficients = []
+    
+    count = int(25 * waveform.shape[1] / sampleRate)
+    for idx in tqdm(range(count)):
+        start_idx = 640 * idx - int(audioFrameLen / 2)
+        end_idx = 640 * idx + int(audioFrameLen / 2)
+        indices = []
+        if start_idx < 0:
+            for _ in range(start_idx, 0):
+                indices.append(0)
+            indices = indices + list(range(0, end_idx))
+            autocorrelation_coefficients.append(LPC(waveform[0:1, :][:, indices]))
+                                                
+        elif (start_idx > 0) and end_idx < waveform.shape[1]:
+            autocorrelation_coefficients.append(LPC(waveform[0:1, :][:, start_idx:end_idx]))
+        else:
+            indices = list(range(start_idx, waveform.shape[1]))
+            for _ in range(waveform.shape[1], end_idx):
+                indices.append(waveform.shape[1] - 1)
+            autocorrelation_coefficients.append(LPC(waveform[0:1, :][:, indices]))
+    
+    autocorrelation_coefficients = torch.stack(autocorrelation_coefficients, dim=0)
+    torch.save(autocorrelation_coefficients, save_path)
+    
+    return autocorrelation_coefficients

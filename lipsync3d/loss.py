@@ -11,6 +11,14 @@ from lipsync3d.utils import get_downsamp_trans
 import os
 import numpy as np
 
+class RMSLoss(nn.Module):
+    def __init__(self):
+        super(RMSLoss, self).__init__()
+    
+    def forward(self, input, target):
+        return torch.sqrt(((input - target)**2).mean())
+
+
 class L2Loss(nn.Module):
     def __init__(self):
         super(L2Loss, self).__init__()
@@ -45,7 +53,7 @@ class WeightedMSELoss(nn.Module):
             if geo_mean[i, 1] < 0.:  # y coordinate
                 mouth_vertex_list.append(i)
 
-        weight = torch.ones((478))
+        weight = torch.ones((downsamp_trans.shape[0]))
         weight[mouth_vertex_list] = 50.
         self.weight = weight.reshape(-1, 1).to(opt.device)
 
@@ -154,3 +162,58 @@ class FaceembLoss(nn.Module):
         cos = torch.sum(1.0 - self.cos(face_emb, face_emb_pred))
 
         return cos
+
+
+class MediapipeLandmarkLoss(nn.Module):
+    def __init__(self, opt):
+        super(MediapipeLandmarkLoss, self).__init__()
+        self.opt = opt
+        self.device = opt.device
+        self.facemodel = FaceModel(opt, batch_size=opt.batch_size)
+
+        downsamp_trans = get_downsamp_trans()
+
+        mat_data = sio.loadmat(opt.matlab_data_path)
+        geo_mean = torch.from_numpy(mat_data['geo_mean']).reshape(-1, 3)
+        geo_mean = torch.mm(downsamp_trans, geo_mean)
+
+        mouth_vertex_list = []
+    
+        for i in range(geo_mean.shape[0]):  # 2232
+            if geo_mean[i, 1] < 0.:  # y coordinate
+                mouth_vertex_list.append(i)
+
+        weight = torch.ones((478))
+        weight[mouth_vertex_list] = 50.
+        self.weight = weight.reshape(-1, 1).to(opt.device)
+
+    def forward(self, mediapipe_mesh, geometry_pred, rotation, translation):
+        mediapipe_mesh_pred = self.facemodel.geometry_to_pixel(geometry_pred, rotation, translation)
+
+        return torch.mean(self.weight * (mediapipe_mesh - mediapipe_mesh_pred) ** 2)
+
+    
+class TemporalLoss(nn.Module):
+    def __init__(self):
+        super(TemporalLoss, self).__init__()
+        self.rms = RMSLoss()
+
+    def forward(self, pred_exp_diff, pred_exp_diff_prv, pred_exp_diff_nxt, target_exp_diff, target_exp_diff_prv, target_exp_diff_nxt):
+        loss = self.rms((pred_exp_diff - pred_exp_diff_prv), (target_exp_diff - target_exp_diff_prv)) \
+                + self.rms((pred_exp_diff - pred_exp_diff_nxt), (target_exp_diff - target_exp_diff_nxt)) \
+                + self.rms((pred_exp_diff_nxt - pred_exp_diff_prv), (target_exp_diff_nxt - target_exp_diff_prv))
+        
+        return loss
+    
+    
+class emotionLoss(nn.Module):
+    def __init__(self):
+        super(emotionLoss, self).__init__()
+        self.l2 = L2Loss()
+        
+    def forward(self, mood, index, index_prv, index_nxt):
+        loss = self.l2(mood[index], mood[index_prv]) \
+                + self.l2(mood[index], mood[index_nxt]) \
+                + self.l2(mood[index_nxt], mood[index_prv])
+        norm = (mood[index] ** 2).mean()
+        return 2 * loss / norm

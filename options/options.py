@@ -13,8 +13,8 @@ class Options:
         self.parser.add_argument('--face_id_path', type=str, default='renderer/data/select_vertex_id.mat')
 
         self.parser.add_argument('--num_epoch', type=int, default=100)
-        self.parser.add_argument('--epoch_tex', type=int, default=10)
-        self.parser.add_argument('--epoch_warm_up', type=int, default=15)
+        self.parser.add_argument('--epoch_tex', type=int, default=100000)
+        self.parser.add_argument('--epoch_warm_up', type=int, default=100000)
         self.parser.add_argument('--batch_size', type=int, default=10)
         self.parser.add_argument('--Nw', type=int, default=7)
         self.parser.add_argument('--serial_batches', type=self.str2bool, default=True)
@@ -35,7 +35,7 @@ class Options:
 
         self.parser.add_argument('--lambda_id', type=float, default=0.0)
         self.parser.add_argument('--lambda_adv', type=float, default=0.001)
-        self.parser.add_argument('--lambda_var', type=float, default=0.0)
+        self.parser.add_argument('--lambda_ver', type=float, default=10.0)
 
         self.parser.add_argument('--lambda_sync', type=float, default=0.0)
         self.parser.add_argument('--syncnet_epoch', type=int, default=10000)
@@ -55,7 +55,8 @@ class Options:
         self.parser.add_argument('--test_num', type=int, default=10000)
         self.parser.add_argument('--gt_pose', type=self.str2bool, default=False)
         self.parser.add_argument('--offset_start', type=int, default=8172)
-        self.parser.add_argument('--offset_end', type=int, default=8290)
+        # self.parser.add_argument('--offset_end', type=int, default=8290)
+        self.parser.add_argument('--offset_end', type=int, default=8173)
 
         # sycnet training parameters
         self.parser.add_argument('--fps', type=int, default=25)

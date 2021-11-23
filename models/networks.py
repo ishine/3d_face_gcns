@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
 import math
 import torch
 import torch.nn as nn
@@ -8,10 +10,11 @@ from .conv import Conv2d
 from renderer.mesh_refiner import ChebResBlock, ChebConv
 from lib.mesh_io import read_obj
 import os
-import utils
+from gcn_util import utils
 import numpy as np
 import scipy.io as sio
 from torch.nn import functional as F
+from lipsync3d.utils import get_downsamp_trans
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -151,16 +154,64 @@ class ResNet(nn.Module):
 class ResnetFaceModelOptimizer(nn.Module):
     def __init__(self, opt):
         super(ResnetFaceModelOptimizer, self).__init__()
+        self.opt = opt
         self.pretrained_model = ResNet()
-        self.fc = nn.Linear(2048, 257)  # 257 - 160 = 97
+        self.fc = nn.Linear(2048, 97)  # 257 - 160 = 97
         self.face_model = FaceModel(opt=opt, batch_size=opt.batch_size)
-
+        self.alpha_resnet = ResNet()
+        self.beta_resnet = ResNet()
+        self.alpha_fc = nn.Linear(2048, 80)
+        self.beta_fc = nn.Linear(2048, 80)
+        
         self.init_weights(opt.pretrained_model_path)
 
         # self.alpha = nn.Parameter(torch.zeros((1, 80, 1), device=opt.device))  # shared for all samples
         # self.beta = nn.Parameter(torch.zeros((1, 80, 1), device=opt.device))  # shared for all samples
+        self.alpha_beta_input = torch.zeros((1, 3, 224, 224), device=opt.device)
 
         self.to(opt.device)
+
+    def init_weights(self, pretrained_model_path):
+        util.load_state_dict(self.pretrained_model, pretrained_model_path)
+        util.load_state_dict(self.alpha_resnet, pretrained_model_path)
+        util.load_state_dict(self.beta_resnet, pretrained_model_path)
+
+        torch.nn.init.zeros_(self.fc.weight)
+        torch.nn.init.zeros_(self.fc.bias)
+        torch.nn.init.zeros_(self.alpha_fc.weight)
+        torch.nn.init.zeros_(self.alpha_fc.bias)
+        torch.nn.init.zeros_(self.beta_fc.weight)
+        torch.nn.init.zeros_(self.beta_fc.bias)
+
+    def forward(self, x, use_refine=True):
+        coef = self.fc(self.pretrained_model(x)).unsqueeze(-1)
+        alpha = self.alpha_fc(self.alpha_resnet(self.alpha_beta_input)).unsqueeze(-1)
+        beta = self.beta_fc(self.beta_resnet(self.alpha_beta_input)).unsqueeze(-1)
+        
+        delta = coef[:, 0:64]
+        rotation = coef[:, 91:94]
+        translation = coef[:, 94:]
+        gamma = coef[:, 64:91]
+
+        render, mask, screen_vertices, tex, refined_tex = self.face_model(alpha, delta, beta, rotation, translation, gamma, use_refine=use_refine)
+
+        return alpha, delta, beta, gamma, rotation, translation, render, mask, screen_vertices, tex, refined_tex
+    
+
+class ResnetDeltaModel(nn.Module):
+    def __init__(self, opt):
+        super(ResnetDeltaModel, self).__init__()
+        self.pretrained_model = ResNet()
+        self.fc = nn.Linear(2048, 64)
+        self.facemodel = FaceModel(opt=opt, batch_size=opt.batch_size)
+
+        self.init_weights(opt.pretrained_model_path)
+        self.to(opt.device)
+        
+        self.downsamp_trans = get_downsamp_trans()
+        mat_data = sio.loadmat(opt.matlab_data_path)
+        exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
+        self.exp_base = torch.mm(self.downsamp_trans, exp_base).reshape(-1, 64).unsqueeze(0).expand(opt.batch_size, -1, -1).to(opt.device)
 
     def init_weights(self, pretrained_model_path):
         util.load_state_dict(self.pretrained_model, pretrained_model_path)
@@ -168,27 +219,24 @@ class ResnetFaceModelOptimizer(nn.Module):
         torch.nn.init.zeros_(self.fc.weight)
         torch.nn.init.zeros_(self.fc.bias)
 
-    def forward(self, x, face_emb):
-        coef = self.fc(self.pretrained_model(x)).unsqueeze(-1)
-
-        alpha = coef[:, :80]
-        beta = coef[:, 80:160]
-        delta = coef[:, 160:224]
-        rotation = coef[:, 251:254]
-        translation = coef[:, 254:]
-        gamma = coef[:, 224:251]
-
-        render, mask, screen_vertices, tex, refined_tex = self.face_model(alpha, delta, beta, rotation, translation, gamma, face_emb=face_emb)
-
-        return alpha, delta, beta, gamma, rotation, translation, render, mask, screen_vertices, tex, refined_tex
+    def forward(self, x, reference_geometry, rotation, translation):
+        delta = self.fc(self.pretrained_model(x)).unsqueeze(-1) # B x 64 x 1
+        geometry_pred = reference_geometry + self.exp_base.bmm(delta).view(-1, 478, 3)
+        
+        mediapipe_mesh_pred = self.facemodel.geometry_to_pixel(geometry_pred, rotation, translation)
+        return delta, mediapipe_mesh_pred
 
 
 class CoefficientRegularization(nn.Module):
-    def __init__(self):
+    def __init__(self, use_mean=False):
         super(CoefficientRegularization, self).__init__()
-
+        self.use_mean = use_mean
     def forward(self, input):
-        return torch.sum(input**2)
+        if self.use_mean:
+            output = torch.sum(torch.mean(input**2, dim=0))
+        else:
+            output = torch.sum(input**2)
+        return output
 
 
 class PhotometricLoss(nn.Module):
@@ -201,11 +249,11 @@ class PhotometricLoss(nn.Module):
 
 
 class LandmarkLoss(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, opt, use_mean=False):
         super(LandmarkLoss, self).__init__()
 
         self.device = opt.device
-
+        self.use_mean = use_mean
         self.landmark_weight = torch.tensor([[
                 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
                 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
@@ -215,7 +263,11 @@ class LandmarkLoss(nn.Module):
 
     def forward(self, landmark, landmark_gt):
         landmark_loss = (landmark - landmark_gt) ** 2
-        landmark_loss = torch.sum(self.landmark_weight * landmark_loss) / 68.0
+        
+        if self.use_mean:
+            landmark_loss = torch.mean(self.landmark_weight * landmark_loss)
+        else:
+            landmark_loss = torch.sum(self.landmark_weight * landmark_loss) / 68.0
 
         return landmark_loss
 
@@ -428,14 +480,14 @@ class MouthMask(nn.Module):
         self.face_model = FaceModel(opt=opt, batch_size=1, load_model=True)
         self.tensor2pil = transforms.ToPILImage()
 
-    def forward(self, alpha, delta, beta, gamma, rotation, translation, face_emb):
+    def forward(self, alpha, delta, beta, gamma, rotation, translation):
         delta = delta.clone()
 
         delta[0, 0, 0] = -8.0
-        _, open_mask, _, _, _ = self.face_model(alpha, delta, beta, rotation, translation, gamma, face_emb, lower=True)
+        _, open_mask, _, _, _ = self.face_model(alpha, delta, beta, rotation, translation, gamma, lower=True)
 
         delta[:, :, :] = 0.0
-        _, close_mask, _, _, _ = self.face_model(alpha, delta, beta, rotation, translation, gamma, face_emb, lower=True)
+        _, close_mask, _, _, _ = self.face_model(alpha, delta, beta, rotation, translation, gamma, lower=True)
 
         mouth_mask = torch.clamp(open_mask + close_mask, min=0.0, max=1.0)
 

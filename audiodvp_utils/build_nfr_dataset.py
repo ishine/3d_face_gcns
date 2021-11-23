@@ -27,7 +27,7 @@ if __name__ == '__main__':
     gamma_list = load_coef(os.path.join(opt.data_dir, 'gamma'))
     angle_list = load_coef(os.path.join(opt.data_dir, 'rotation'))
     translation_list = load_coef(os.path.join(opt.data_dir, 'translation'))
-    face_emb_list = load_face_emb(opt.data_dir)
+    # face_emb_list = load_face_emb(opt.data_dir)
 
     crop_region_list = load_coef(os.path.join(opt.data_dir, 'crop_region'))
     full_image_list = get_file_list(os.path.join(opt.data_dir, 'full'))
@@ -43,11 +43,11 @@ if __name__ == '__main__':
         gamma = gamma_list[i].unsqueeze(0).cuda()
         rotation = angle_list[i].unsqueeze(0).cuda()
         translation = translation_list[i].unsqueeze(0).cuda()
-        face_emb = face_emb_list[i].unsqueeze(0).cuda()
+        # face_emb = face_emb_list[i].unsqueeze(0).cuda()
         crop_region = crop_region_list[i]
         empty_image = np.zeros((H, W), np.uint8)
 
-        mask = mouth_mask(alpha, delta, beta, gamma, rotation, translation, face_emb)
+        mask = mouth_mask(alpha, delta, beta, gamma, rotation, translation)
         mask = mask.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.0
         mask = cv2.dilate(mask, np.ones((3,3), np.uint8), iterations=4)
         rescaled_mask = rescale_and_paste(crop_region, empty_image, mask)

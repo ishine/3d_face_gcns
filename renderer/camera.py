@@ -8,11 +8,11 @@ import torch.nn as nn
 
 
 class Camera(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
 
         super(Camera, self).__init__()
 
-        self.device = torch.device('cuda')
+        self.device = device
 
         self.camera_position = torch.tensor([[0.0, 0.0, 8.0]], device=self.device)
         self.camera_lookat = torch.tensor([[0.0, 0.0, 0.0]], device=self.device)

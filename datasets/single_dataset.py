@@ -11,7 +11,7 @@ from datasets.base_dataset import BaseDataset
 class SingleDataset(BaseDataset):
     def __init__(self, opt):
         BaseDataset.__init__(self, opt)
-
+        self.opt = opt
         self.image_list = util.get_file_list(os.path.join(self.opt.data_dir, 'crop'))
 
         self.transforms_input = transforms.Compose([
@@ -21,7 +21,7 @@ class SingleDataset(BaseDataset):
                                 ])
 
         self.landmark_dict = self.load_landmark_dict()
-        self.face_emb_dict = self.load_face_emb_dict()
+        # self.face_emb_dict = self.load_face_emb_dict()
 
         self.transforms_gt = transforms.ToTensor()
 
@@ -35,9 +35,9 @@ class SingleDataset(BaseDataset):
         input = self.transforms_input(image)
         gt = self.transforms_gt(image)
         landmark_gt = torch.tensor(self.landmark_dict[image_name])
-        face_emb = self.face_emb_dict[image_name]
+        # face_emb = self.face_emb_dict[image_name]
 
-        return {'input': input, 'gt': gt, 'landmark_gt': landmark_gt, 'face_emb' : face_emb, 'image_name': os.path.basename(image_name)}
+        return {'input': input, 'gt': gt, 'landmark_gt': landmark_gt, 'image_name': os.path.basename(image_name)}
 
     def load_landmark_dict(self):
         landmark_path = os.path.join(self.opt.data_dir, 'landmark.pkl')

@@ -7,20 +7,19 @@ from .rasterizer import Rasterizer
 
 
 class Renderer(nn.Module):
-    def __init__(self, image_width=256, image_height=256):
+    def __init__(self, device, image_width=256, image_height=256):
         super(Renderer, self).__init__()
 
-        self.device = torch.device('cuda')
+        self.device = device
         self.image_width = image_width
         self.image_height = image_height
 
         self.rasterizer = Rasterizer()
-        self.shader = SphericalHarmonics()
+        self.shader = SphericalHarmonics(device)
 
     def forward(self, clip_vertices, triangles, normals, diffuse_colors, gamma):
         diffuse_colors_sh = self.shader(normals, diffuse_colors, gamma)
         render_image, alpha_mask = self.rasterizer(clip_vertices, diffuse_colors_sh, triangles)
-
         return render_image, alpha_mask
 
 
@@ -37,9 +36,9 @@ class SphericalHarmonics(nn.Module):
     Returns:
         face_color: a [1,N,3] tensor, RGB order, range from 0-255
     """
-    def __init__(self):
+    def __init__(self, device):
         super(SphericalHarmonics, self).__init__()
-        self.device = torch.device('cuda')
+        self.device = device
         self.init_light = torch.tensor([[[0.7000, 0.7000, 0.7000],
                                          [0.0000, 0.0000, 0.0000],
                                          [0.0000, 0.0000, 0.0000],

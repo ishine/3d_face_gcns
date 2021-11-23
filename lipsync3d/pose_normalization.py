@@ -10,7 +10,7 @@ import argparse
 import math
 from tqdm import tqdm
 import torch
-from lipsync3d.utils import landmark_to_dict
+from lipsync3d.utils import landmark_to_dict, normalized_to_pixel_coordinates
 import numpy as np
 import cv2
 import mediapipe as mp
@@ -48,27 +48,6 @@ def draw_landmark(results, image, save_path):
         .get_default_face_mesh_tesselation_style())
 
     cv2.imwrite(save_path, image)
-
-
-def normalized_to_pixel_coordinates(landmark_dict, image_width, image_height):
-    def is_valid_normalized_value(value):
-        return (value > 0 or math.isclose(0, value)) and (value < 1 or math.isclose(1, value))
-
-    landmark_pixel_coord_dict = {}
-
-    for idx, coord in landmark_dict.items():
-        if (idx == 'R') or (idx == 't') or (idx == 'c'):
-            continue
-
-        if not (is_valid_normalized_value(coord[0]) and
-                is_valid_normalized_value(coord[1])):
-            # TODO: Draw coordinates even if it's outside of the image bounds.
-            return None
-        x_px = coord[0] * image_width
-        y_px = coord[1] * image_height
-        z_px = coord[2] * image_width
-        landmark_pixel_coord_dict[idx] = [x_px, y_px, z_px]
-    return landmark_pixel_coord_dict
 
 
 def draw_pose_normalized_mesh(target_dict, image, save_path):

@@ -126,5 +126,5 @@ if __name__ == '__main__':
     parser.add_argument('--vertical_adjust', type=float, default=0.3, help='Adjust vertical location of portrait in image.')
     args = parser.parse_args()
     util.create_dir(os.path.join(args.data_dir, 'crop_region'))
-    # crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
-    crop_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level, vertical_adjust=args.vertical_adjust)
+    crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
+    # crop_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level, vertical_adjust=args.vertical_adjust)

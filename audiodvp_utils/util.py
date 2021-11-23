@@ -98,7 +98,7 @@ def plot_landmark(data_dir):
         landmark = landmark_dict[image_name]
 
         for point in landmark:
-            image = cv2.circle(image, (point[0], point[1]), radius=0, color=(255, 0, 0), thickness=-1)
+            image = cv2.circle(image, (int(point[0]), int(point[1])), radius=2, color=(255, 0, 0), thickness=-1)
 
         cv2.imwrite(os.path.join(data_dir, 'landmark', os.path.basename(image_name)), image)
 

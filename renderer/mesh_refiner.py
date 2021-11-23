@@ -82,9 +82,9 @@ class ChebResBlock(nn.Module):
 
 
 class MeshRefinementModel(nn.Module):
-    def __init__(self):
+    def __init__(self, opt):
         super(MeshRefinementModel, self).__init__()
-        self.device = torch.device('cuda')
+        self.device = opt.device
         self.refer_mesh = read_obj(os.path.join('renderer', 'data', 'bfm09_face_template.obj'))
         self.laplacians, self.downsamp_trans, self.upsamp_trans, self.pool_size = init_sampling(
         self.refer_mesh, os.path.join('renderer', 'data', 'params', 'bfm09_face'), 'bfm09_face')
@@ -114,6 +114,8 @@ class MeshRefinementModel(nn.Module):
                                                 ChebResBlock(self.refineF[4], self.refineF[5], self.laplacians[0], self.K)])
 
         self.combiner = ChebConv(6, 3, self.laplacians[0], self.K, is_last=True)
+        
+        self.image_emb = torch.ones((opt.batch_size, 512), device=opt.device)
 
     def poolwT(self, inputs, L):
         Mp = L.shape[0]
@@ -156,8 +158,8 @@ class MeshRefinementModel(nn.Module):
         return outputs
 
 
-    def forward(self, image_emb, tex):
-        decode_color = self.mesh_decoder(image_emb)
+    def forward(self, tex):
+        decode_color = self.mesh_decoder(self.image_emb)
         refine_color = self.mesh_refiner(tex)
         concat = torch.cat([decode_color, refine_color], dim = -1)
         outputs = self.combiner(concat)

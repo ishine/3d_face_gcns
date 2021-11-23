@@ -8,7 +8,7 @@ import argparse
 from torch import full
 from tqdm import tqdm
 import numpy as np
-from .util import load_coef, create_dir, get_file_list
+from .util import load_coef, create_dir, get_file_list, get_max_crop_region
 
 # Resacle overlay and render images. Paste it on full image.
 def rescale_and_paste(crop_region, full_image, target_image):
@@ -22,6 +22,16 @@ def rescale_and_paste(crop_region, full_image, target_image):
 
     return pasted_image
 
+def rescale_crop(crop_region_list, full_image):
+    top, bottom, left, right = get_max_crop_region(crop_region_list)
+    height = bottom - top
+    width = right - left
+    pasted_image = full_image.copy()
+    pasted_image = pasted_image[top:bottom, left:right]
+    pasted_image = cv2.resize(pasted_image, (256, 256), interpolation=cv2.INTER_AREA)
+    
+    return pasted_image
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process some integers.')
@@ -33,10 +43,11 @@ if __name__ == '__main__':
     overlay_image_list = get_file_list(os.path.join(args.data_dir, 'overlay'))
     render_image_list = get_file_list(os.path.join(args.data_dir, 'render'))
 
-    create_dir(os.path.join(args.data_dir, 'rescaled_overlay'))
-    create_dir(os.path.join(args.data_dir, 'rescaled_render'))
+    # create_dir(os.path.join(args.data_dir, 'rescaled_overlay'))
+    # create_dir(os.path.join(args.data_dir, 'rescaled_render'))
+    create_dir(os.path.join(args.data_dir, 'rescaled_crop'))
 
-    for i in tqdm(range(len(full_image_list))):
+    for i in tqdm(range(len(full_image_list[:3000]))):
         full_image = cv2.imread(full_image_list[i])
         overlay_image = cv2.imread(overlay_image_list[i])
         render_image = cv2.imread(render_image_list[i])
@@ -47,6 +58,8 @@ if __name__ == '__main__':
 
         pasted_overlay = rescale_and_paste(crop_region, full_image, overlay_image)
         pasted_render = rescale_and_paste(crop_region, empty_image, render_image)
+        rescaled_crop = rescale_crop(crop_region_list, full_image)
 
-        cv2.imwrite(os.path.join(args.data_dir, 'rescaled_overlay', os.path.basename(full_image_list[i])), pasted_overlay)
-        cv2.imwrite(os.path.join(args.data_dir, 'rescaled_render', os.path.basename(full_image_list[i])), pasted_render)   
+        # cv2.imwrite(os.path.join(args.data_dir, 'rescaled_overlay', os.path.basename(full_image_list[i])), pasted_overlay)
+        # cv2.imwrite(os.path.join(args.data_dir, 'rescaled_render', os.path.basename(full_image_list[i])), pasted_render)   
+        cv2.imwrite(os.path.join(args.data_dir, 'rescaled_crop', os.path.basename(full_image_list[i])), rescaled_crop)

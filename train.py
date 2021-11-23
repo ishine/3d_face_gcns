@@ -46,6 +46,8 @@ if __name__ == '__main__':
                 visualizer.plot_current_losses(total_iters, losses)
 
             iter_data_time = time.time()
+            
+        model.save_render_image(epoch)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.num_epoch, time.time() - epoch_start_time))
 
@@ -53,6 +55,6 @@ if __name__ == '__main__':
     with tqdm(total=len(dataset)) as progress_bar:
         for i, data in enumerate(dataset):
             model.set_input(data)
-            model.forward()
+            model.forward(opt.num_epoch)
             model.save_result()
             progress_bar.update(opt.batch_size)

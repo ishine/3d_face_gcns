@@ -13,9 +13,9 @@ class FaceModel(nn.Module):
     def __init__(self, opt, batch_size, image_width=256, image_height=256, load_model=False, downsamp_tran=None):
         super(FaceModel, self).__init__()
         self.mat_data = sio.loadmat(opt.matlab_data_path)
-
+        opt.batch_size = batch_size
         self.batch_size = batch_size
-        self.device = torch.device('cuda')
+        self.device = opt.device
 
         self.image_width = image_width
         self.image_height = image_height
@@ -23,9 +23,9 @@ class FaceModel(nn.Module):
 
         self.load_data()
 
-        self.camera = Camera()
-        self.renderer = Renderer()
-        self.refiner = MeshRefinementModel().to(self.device)
+        self.camera = Camera(opt.device)
+        self.renderer = Renderer(opt.device)
+        self.refiner = MeshRefinementModel(opt).to(self.device)
 
         if load_model:
             self.load_refinement_model(opt)
@@ -45,9 +45,9 @@ class FaceModel(nn.Module):
 
         self.geo_mean = torch.from_numpy(self.mat_data['geo_mean']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
         self.tex_mean = torch.from_numpy(self.mat_data['tex_mean']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
-        self.id_base = torch.from_numpy(self.mat_data['id_base']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
+        self.id_base = torch.from_numpy(self.mat_data['id_base']).unsqueeze(0).to(self.device)
         self.exp_base = torch.from_numpy(self.mat_data['exp_base']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
-        self.tex_base = torch.from_numpy(self.mat_data['tex_base']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
+        self.tex_base = torch.from_numpy(self.mat_data['tex_base']).unsqueeze(0).to(self.device)
 
         self.landmark_index = torch.tensor([
             27440, 27208, 27608, 27816, 35472, 34766, 34312, 34022, 33838, 33654,
@@ -108,6 +108,7 @@ class FaceModel(nn.Module):
         if delta.shape[1] == 64:
             geo = self.geo_mean + self.id_base.bmm(alpha) + self.exp_base.bmm(delta)
             geo = geo.reshape(-1, 3)
+            geo = torch.mm(self.downsamp_tran, geo).reshape(1, -1, 3)
         else:
             geo = self.geo_mean + self.id_base.bmm(alpha)
             geo = geo.reshape(-1, 3)
@@ -130,7 +131,7 @@ class FaceModel(nn.Module):
         landmarks = self.transform_to_screen_space(clip_vertices)
         return landmarks
 
-    def forward(self, alpha, delta, beta, rotation, translation, gamma, face_emb=None, lower=False, is_train=True):
+    def forward(self, alpha, delta, beta, rotation, translation, gamma, face_emb=None, lower=False, use_refine=True, refer_texture=None):
         geo, tex = self.build_face_model(alpha, delta, beta)
         norm = self.calc_norm(geo)
         geo, norm = self.transform_to_world_space(geo, norm, rotation, translation)
@@ -139,15 +140,13 @@ class FaceModel(nn.Module):
 
         landmarks = screen_vertices[:, self.landmark_index]
 
-        if face_emb == None:
-            refined_tex = tex
+        if refer_texture != None:
+            refined_tex = refer_texture
+        elif use_refine:
+            refined_tex = self.refiner(tex)
         else:
-            if is_train:
-                refined_tex = self.refiner(face_emb, tex)
-            else:
-                with torch.no_grad():
-                    refined_tex = self.refiner(face_emb, tex)
-
+            refined_tex = tex
+        
         if not lower:
             render_image, alpha_mask = self.renderer(clip_vertices, self.triangles, norm, refined_tex, gamma)
         else:

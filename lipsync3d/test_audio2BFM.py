@@ -24,7 +24,7 @@ if __name__ == '__main__':
     )
 
     model = Audio2GeometryModel(opt).to(device)
-    ckpt = torch.load(os.path.join(opt.tgt_dir, 'audio_to_geometry.pth'), map_location=device)
+    ckpt = torch.load(os.path.join(opt.tgt_dir, 'audio_to_geometry_{}.pth'.format(opt.suffix)), map_location=device)
     model.load_state_dict(ckpt)
     os.makedirs(os.path.join(opt.src_dir, 'reenact_geometry'), exist_ok=True)
 
