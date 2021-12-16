@@ -12,6 +12,7 @@ import util
 import numpy as np
 import face_detection
 
+
 def calc_bbox(image_list, batch_size=5):
     """Batch infer of face location, batch_size should be factor of total frame number."""
     fa = face_detection.FaceAlignment(face_detection.LandmarksType._2D, flip_input=False, device='cuda')

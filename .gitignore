@@ -14,3 +14,6 @@ deepspeech-0.9.3-models.pbmm
 deepspeech-0.9.3-models.scorer
 output_graph.pb
 test_image_*.png
+tts_features2.dat
+phoneme_mesh_model_middle.pt
+phoneme_mesh_model_segment.pt

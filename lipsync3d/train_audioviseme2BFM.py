@@ -16,8 +16,8 @@ if __name__ == '__main__':
     opt = Options().parse_args()
     device = opt.device
     
-    train_dataset = Audio2GeometryDataset(opt)
-    valid_dataset = Audio2GeometryDataset(opt, is_valid=True)
+    train_dataset = Audio2GeometrywithEnergyPitchDataset(opt) 
+    valid_dataset = Audio2GeometrywithEnergyPitchDataset(opt, is_valid=True) 
 
     train_dataloader = DataLoader(
         train_dataset,
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     )
     
     visualizer = Visualizer(opt)
-    model = Audio2GeometryModel(opt, len(train_dataset)).to(device)
+    model = Audio2GeometrywithEnergyPitchModel(opt, len(train_dataset)).to(device) 
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.5, 0.999))
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_step, gamma=opt.lr_decay)
     criterionGeo = WeightedMSELoss(opt)
@@ -61,14 +61,23 @@ if __name__ == '__main__':
             target_exp_diff = data['target_exp_diff'].to(device)
             target_exp_diff_prv = data['target_exp_diff_prv'].to(device)
             target_exp_diff_nxt = data['target_exp_diff_nxt'].to(device)
+            audio_energy = data['audio_energy'].to(device)
+            audio_energy_prv = data['audio_energy_prv'].to(device)
+            audio_energy_nxt = data['audio_energy_nxt'].to(device)
+            audio_pitch = data['audio_pitch'].to(device)
+            audio_pitch_prv = data['audio_pitch_prv'].to(device)
+            audio_pitch_nxt = data['audio_pitch_nxt'].to(device)
+            viseme = data['viseme'].to(device)
+            viseme_prv = data['viseme_prv'].to(device)
+            viseme_nxt = data['viseme_nxt'].to(device)
             
             index = data['index'].to(device)
             index_prv = data['index_prv'].to(device)
             index_nxt = data['index_nxt'].to(device)
 
-            pred_exp_diff = model(audio_feature, index)
-            pred_exp_diff_prv = model(audio_feature_prv, index_prv)
-            pred_exp_diff_nxt = model(audio_feature_nxt, index_nxt)
+            pred_exp_diff = model(audio_feature, viseme, audio_energy, audio_pitch, index) # model(audio_feature, index)
+            pred_exp_diff_prv = model(audio_feature_prv, viseme_prv, audio_energy_prv, audio_pitch_prv, index_prv) # model(audio_feature_prv, index_prv)
+            pred_exp_diff_nxt = model(audio_feature_nxt, viseme_nxt, audio_energy_nxt, audio_pitch_nxt, index_nxt) # model(audio_feature_nxt, index_nxt)
             
             geometryLoss = criterionGeo(target_exp_diff, pred_exp_diff)
             
@@ -91,8 +100,11 @@ if __name__ == '__main__':
             for i, data in enumerate(valid_dataloader):
                 audio_feature = data['audio_feature'].to(device)
                 target_exp_diff = data['target_exp_diff'].to(device)
+                audio_energy = data['audio_energy'].to(device)
+                audio_pitch = data['audio_energy'].to(device)
+                viseme = data['viseme'].to(device)
 
-                pred_exp_diff = model(audio_feature)
+                pred_exp_diff = model(audio_feature, viseme, audio_energy, audio_pitch) #model(audio_feature)
                 
                 geometryLoss = criterionGeo(target_exp_diff, pred_exp_diff)
 

@@ -7,7 +7,8 @@ import os
 import torch
 import numpy as np
 import librosa
-from utils import landmarkdict_to_normalized_mesh_tensor, landmarkdict_to_mesh_tensor, get_downsamp_trans, load_mediapipe_mesh_dict, get_autocorrelation_coefficients
+from utils import landmarkdict_to_normalized_mesh_tensor, landmarkdict_to_mesh_tensor, get_downsamp_trans, \
+    load_mediapipe_mesh_dict, get_mel_spectogram, get_audio_stft, get_audio_energy_pitch, get_viseme_list
 from audiodvp_utils import util
 from torch.utils.data import Dataset
 import pickle
@@ -208,24 +209,11 @@ class Audio2GeometryDataset(Dataset):
         self.tgt_dir = opt.tgt_dir
         self.device = opt.device
 
-        stft_path = os.path.join(self.src_dir, 'audio/audio_stft.pt')
-        if not os.path.exists(stft_path):
-            audio = librosa.load(os.path.join(self.src_dir, 'audio/audio.wav'),16000)[0]
-            audio_stft = librosa.stft(audio, n_fft=510, hop_length=160, win_length=480)
-            self.audio_stft_real_imag = torch.from_numpy(np.stack((audio_stft.real, audio_stft.imag)))
-            
-            self.audio_stft = []
-            print('audio pre-processing...')
-            for idx in tqdm(range(self.audio_stft_real_imag.shape[2] // 4)):
-                self.audio_stft.append(self.get_audio_feature(idx))
-            
-            torch.save(self.audio_stft, os.path.join(self.src_dir, 'audio/audio_stft.pt'))
-        else:
-            self.audio_stft = torch.load(os.path.join(self.src_dir, 'audio/audio_stft.pt'))
+        self.audio_feature = get_audio_stft(self.src_dir)
 
         self.filenames = util.get_file_list(os.path.join(self.tgt_dir, 'alpha'))
         self.start_idx = 0
-        self.len = len(self.audio_stft)
+        self.len = len(self.audio_feature)
 
         if opt.isTrain:
             self.downsamp_trans = get_downsamp_trans()
@@ -234,7 +222,7 @@ class Audio2GeometryDataset(Dataset):
             self.id_base, self.exp_base, self.geo_mean = self.mat_datum()
 
             self.image_list = util.get_file_list(os.path.join(self.opt.tgt_dir, 'crop'))
-            minlen = min(len(self.image_list), len(self.audio_stft))
+            minlen = min(len(self.image_list), len(self.audio_feature))
             self.len = int(minlen * self.opt.train_rate)
             if is_valid:
                 self.start_idx = self.len
@@ -258,33 +246,18 @@ class Audio2GeometryDataset(Dataset):
 
     def __len__(self):
         return self.len
-    
-    def get_audio_feature(self, index):
-        audio_idx = index * 4
-        audio_feature_list = []
-        for i in range(audio_idx - 12, audio_idx + 12):
-            if i < 0:
-                audio_feature_list.append(self.audio_stft_real_imag[:, :, 0])
-            elif i >= self.audio_stft_real_imag.shape[2]:
-                audio_feature_list.append(self.audio_stft_real_imag[:, :, -1])
-            else:
-                audio_feature_list.append(self.audio_stft_real_imag[:, :, i])
-
-        audio_feature = torch.stack(audio_feature_list, 2)
-        return audio_feature
-
 
     def __getitem__(self, index):
         index = index + self.start_idx
-        audio_feature = self.audio_stft[index]
+        audio_feature = self.audio_feature[index]
 
-        filename = os.path.basename(self.filenames[index])
+        filename = '%05d' % (index + 1) + '.pt'
 
         if not self.opt.isTrain:
             return {'audio_feature': audio_feature, 'filename': filename}
         else:
-            audio_feature_prv = self.audio_stft[max(index - 1, 0)]
-            audio_feature_nxt = self.audio_stft[min(index + 1, len(self) - 1)]
+            audio_feature_prv = self.audio_feature[max(index - 1, 0)]
+            audio_feature_nxt = self.audio_feature[min(index + 1, len(self) - 1)]
             
             delta = self.delta_list[index]
             delta_prv = self.delta_list[max(index - 1, 0)]
@@ -302,6 +275,119 @@ class Audio2GeometryDataset(Dataset):
                 'target_exp_diff': target_exp_diff,
                 'target_exp_diff_prv': target_exp_diff_prv,
                 'target_exp_diff_nxt': target_exp_diff_nxt,
+                'index': index,
+                'index_prv': max(index - 1, 0),
+                'index_nxt': min(index + 1, len(self) - 1)
+            }
+
+
+
+class Audio2GeometrywithEnergyPitchDataset(Dataset):
+    def __init__(self, opt, is_valid=False):
+        self.opt = opt
+        self.src_dir = opt.src_dir
+        self.tgt_dir = opt.tgt_dir
+        self.device = opt.device
+
+        self.audio_feature = get_audio_stft(self.src_dir)
+        self.audio_energy, self.audio_pitch, _, _, _, _ = get_audio_energy_pitch(self.src_dir)
+        _, _, self.e_mean, self.e_std, self.p_mean, self.p_std = get_audio_energy_pitch(self.tgt_dir)
+        self.viseme_list = get_viseme_list(self.src_dir)
+        
+        self.filenames = util.get_file_list(os.path.join(self.tgt_dir, 'alpha'))
+        self.start_idx = 0
+        self.len = len(self.audio_feature)
+
+        if opt.isTrain:
+            self.downsamp_trans = get_downsamp_trans()
+
+            self.delta_list = util.load_coef(os.path.join(self.tgt_dir, 'delta'))
+            self.id_base, self.exp_base, self.geo_mean = self.mat_datum()
+
+            self.image_list = util.get_file_list(os.path.join(self.opt.tgt_dir, 'crop'))
+            minlen = min(len(self.image_list), len(self.audio_feature))
+            self.len = int(minlen * self.opt.train_rate)
+            if is_valid:
+                self.start_idx = self.len
+                self.len = minlen - self.len
+
+        print('dataset size: ', len(self))
+
+    def mat_datum(self):
+        mat_data = sio.loadmat(self.opt.matlab_data_path)
+
+        exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
+        exp_base = torch.mm(self.downsamp_trans, exp_base).reshape(-1, 64)
+
+        id_base = torch.from_numpy(mat_data['id_base']).reshape(-1, 3 * 80)
+        id_base = torch.mm(self.downsamp_trans, id_base).reshape(-1, 80)
+
+        geo_mean = torch.from_numpy(mat_data['geo_mean']).reshape(-1, 3)
+        geo_mean = torch.mm(self.downsamp_trans, geo_mean).reshape(-1, 1)
+
+        return id_base, exp_base, geo_mean
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, index):
+        index = index + self.start_idx
+        audio_feature = self.audio_feature[index]
+
+        filename = '%05d' % (index + 1) + '.pt'
+        audio_energy = (self.audio_energy[index] - self.e_mean) / self.e_std
+        audio_pitch = (self.audio_pitch[index] - self.p_mean) / self.p_std
+        viseme = self.viseme_list[index]
+        
+        if not self.opt.isTrain:
+            return {'audio_feature': audio_feature, 
+                    'viseme': viseme, 
+                    'audio_energy': audio_energy, 
+                    'audio_pitch': audio_pitch, 
+                    'filename': filename}
+        else:
+            prv_index = max(index - 1, 0)
+            nxt_index = min(index + 1, len(self) - 1)
+            audio_feature_prv = self.audio_feature[prv_index]
+            audio_feature_nxt = self.audio_feature[nxt_index]
+            
+            delta = self.delta_list[index]
+            delta_prv = self.delta_list[prv_index]
+            delta_nxt = self.delta_list[nxt_index]
+            
+            target_exp_diff = torch.matmul(self.exp_base, delta).reshape(-1, 3)
+            target_exp_diff_prv = torch.matmul(self.exp_base, delta_prv).reshape(-1, 3)
+            target_exp_diff_nxt = torch.matmul(self.exp_base, delta_nxt).reshape(-1, 3)
+            
+            audio_energy = (self.audio_energy[index] - self.e_mean) / self.e_std
+            audio_energy_prv = (self.audio_energy[prv_index] - self.e_mean) / self.e_std
+            audio_energy_nxt = (self.audio_energy[nxt_index] - self.e_mean) / self.e_std
+            
+            audio_pitch = (self.audio_pitch[index] - self.p_mean) / self.p_std
+            audio_pitch_prv = (self.audio_pitch[prv_index] - self.p_mean) / self.p_std
+            audio_pitch_nxt = (self.audio_pitch[nxt_index] - self.p_mean) / self.p_std
+
+            viseme = self.viseme_list[index]
+            viseme_prv = self.viseme_list[prv_index]
+            viseme_nxt = self.viseme_list[nxt_index]
+            
+            return {
+                'audio_feature': audio_feature,
+                'audio_feature_prv': audio_feature_prv,
+                'audio_feature_nxt': audio_feature_nxt,
+                'filename': filename,
+                'target_exp_diff': target_exp_diff,
+                'target_exp_diff_prv': target_exp_diff_prv,
+                'target_exp_diff_nxt': target_exp_diff_nxt,
+                'audio_energy': audio_energy,
+                'audio_energy_prv': audio_energy_prv,
+                'audio_energy_nxt': audio_energy_nxt,
+                'audio_pitch': audio_pitch,
+                'audio_pitch_prv': audio_pitch_prv,
+                'audio_pitch_nxt': audio_pitch_nxt,
+                'viseme': viseme,
+                'viseme_prv': viseme_prv,
+                'viseme_nxt': viseme_nxt,
                 'index': index,
                 'index_prv': max(index - 1, 0),
                 'index_nxt': min(index + 1, len(self) - 1)

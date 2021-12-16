@@ -6,12 +6,10 @@ from torchvision import utils
 import numpy as np
 from renderer.face_model import FaceModel
 from options.options import Options
-from audiodvp_utils.util import create_dir, load_coef, load_face_emb, get_file_list, get_max_crop_region
+from audiodvp_utils.util import create_dir, load_coef, get_file_list, get_max_crop_region
 from audiodvp_utils.rescale_image import rescale_and_paste
-from lib.mesh_io import read_obj
-from gcn_util.utils import init_sampling
 import scipy.io as sio
-from lipsync3d.utils import get_downsamp_trans, downsamp_mediapipe_mesh, viterbi_algorithm
+from lipsync3d.utils import get_downsamp_trans, viterbi_algorithm
 
 
 if __name__ == '__main__':
@@ -23,16 +21,10 @@ if __name__ == '__main__':
     mat_data = sio.loadmat(mat_path)
     exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
     exp_base = torch.mm(downsamp_trans, exp_base).reshape(-1, 64).double()
-    M = exp_base.t() @ exp_base # 64 x 64
-    M = M.inverse() @ exp_base.t() # 64 x (2232 * 3)
-    M = M.cuda().float()
-    create_dir(os.path.join(opt.src_dir, 'reenact'))
-    create_dir(os.path.join(opt.src_dir, 'reenact_bfm_mesh'))
+    reenact_save_path = os.path.join(opt.tgt_dir, 'reenact_tg', os.path.basename(opt.tg_path).split(".")[0])
+    create_dir(reenact_save_path)
     alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
     beta_list = load_coef(os.path.join(opt.tgt_dir, 'beta'))
-    delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_geometry'))
-    # delta_list = load_coef(os.path.join(opt.src_dir, 'reenact_delta'))
-    # delta_list = load_coef(os.path.join(opt.tgt_dir, 'delta'))
     gamma_list = load_coef(os.path.join(opt.tgt_dir, 'gamma'))
     angle_list = load_coef(os.path.join(opt.tgt_dir, 'rotation'))
     translation_list = load_coef(os.path.join(opt.tgt_dir, 'translation'))
@@ -46,14 +38,15 @@ if __name__ == '__main__':
 
     top, bottom, left, right = get_max_crop_region(crop_region_list)
 
+    delta_list = viterbi_algorithm(opt.tgt_dir, opt.tg_path)
+    
     for i in tqdm(range(len(delta_list))):
         alpha = alpha_list[0].unsqueeze(0).cuda()
         beta = beta_list[0].unsqueeze(0).cuda()
-        delta = delta_list[i].reshape(-1, 1).cuda() # (2232 *3) x 1       # 1674 x 1
-        delta = M @ delta
-        delta = delta.unsqueeze(0)
+        delta = delta_list[i].unsqueeze(0).cuda()
 
-        idx = i % (opt.offset_end - opt.offset_start ) + opt.offset_start
+        # idx = i % (opt.offset_end - opt.offset_start) + opt.offset_start
+        idx = i
         gamma = gamma_list[idx].unsqueeze(0).cuda()
         rotation = angle_list[idx].unsqueeze(0).cuda()
         translation = translation_list[idx].unsqueeze(0).cuda()
@@ -68,16 +61,4 @@ if __name__ == '__main__':
         rescaled_render = cv2.cvtColor(rescaled_render, cv2.COLOR_RGB2BGR)
         rescaled_render = rescaled_render[top:bottom, left:right]
         rescaled_render = cv2.resize(rescaled_render, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(os.path.join(opt.src_dir, 'reenact', '%05d.png' % (i+1)), rescaled_render)
-
-
-
-        delta = delta_list[i].unsqueeze(0).cuda()
-        landmarks = face_model.downsampled_landmarks(alpha, delta, rotation, translation)
-        empty_image = 255 * np.ones((256, 256, 3), np.uint8)
-        n = landmarks.shape[0]
-        for idx in range(n):
-            x, y = int(landmarks[idx][0].item()), int(landmarks[idx][1].item())
-            empty_image = cv2.circle(empty_image, (x,y), radius=2, color=(0, 0, 0), thickness=-1)
-
-        cv2.imwrite(os.path.join(opt.src_dir, 'reenact_bfm_mesh', '%05d.png' % (i+1)), empty_image)
+        cv2.imwrite(os.path.join(reenact_save_path, '%05d.png' % (i+1)), rescaled_render)

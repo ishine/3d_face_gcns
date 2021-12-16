@@ -1,7 +1,7 @@
 import sys
 sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
 
-from audiodvp_utils import util
+from audiodvp_utils import util, audio
 import numpy as np
 import math
 import torch
@@ -14,6 +14,12 @@ import cv2
 import pickle
 from lipsync3d import lpc
 import librosa
+import scipy.io as sio
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from lipsync3d.audio.stft import TacotronSTFT
+import pyworld as pw
+import tgt
 
 # Input :
 #       reference(dictionary from vertex idx to normalized landmark, dict[idx] = [x, y, z]) : landmark of reference frame.
@@ -266,6 +272,99 @@ def load_mediapipe_mesh_dict(target_dir):
     return mediapipe_mesh_dict
 
 
+def get_train_data_statistic(opt):
+    delta_list = util.load_coef(os.path.join(opt.tgt_dir, 'delta'))
+    downsamp_trans = get_downsamp_trans()
+
+    mat_data = sio.loadmat(opt.matlab_data_path)
+    exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
+    exp_base = torch.mm(downsamp_trans, exp_base).reshape(-1, 64)
+
+    exp_list = []
+    for delta in delta_list:
+        target_exp_diff = torch.matmul(exp_base, delta).reshape(1, -1)
+        exp_list.append(target_exp_diff)
+    
+    exp_tensor = torch.cat(exp_list, dim=0)
+    exp_numpy = exp_tensor.numpy()
+    SS= StandardScaler()
+    scaled_exp = SS.fit_transform(exp_numpy)
+    pca = PCA(n_components=150)
+    pca.fit(scaled_exp)
+    
+    mean = torch.from_numpy(SS.mean_).to(opt.device).float()
+    scale = torch.from_numpy(SS.scale_).to(opt.device).float()
+    components = torch.from_numpy(pca.components_).transpose(0, 1).to(opt.device).float()
+    
+    return mean, scale, components
+    
+
+def get_audio_stft(src_dir):
+    save_path = os.path.join(src_dir, 'audio/audio_stft.pt')
+    audio_path = os.path.join(src_dir, 'audio/audio.wav')
+
+    if os.path.exists(save_path):
+        return torch.load(save_path)
+    
+    audio = librosa.load(audio_path,16000)[0]
+    audio_stft = librosa.stft(audio, n_fft=510, hop_length=160, win_length=480)
+    audio_stft_real_imag = torch.from_numpy(np.stack((audio_stft.real, audio_stft.imag)))
+    
+    audio_stft = []
+    print('audio pre-processing...')
+    for idx in tqdm(range(audio_stft_real_imag.shape[2] // 4)):
+        audio_idx = idx * 4
+        audio_feature_list = []
+        for i in range(audio_idx - 12, audio_idx + 12):
+            if i < 0:
+                audio_feature_list.append(audio_stft_real_imag[:, :, 0])
+            elif i >= audio_stft_real_imag.shape[2]:
+                audio_feature_list.append(audio_stft_real_imag[:, :, -1])
+            else:
+                audio_feature_list.append(audio_stft_real_imag[:, :, i])
+                
+        audio_feature = torch.stack(audio_feature_list, 2)
+        audio_stft.append(audio_feature)
+    
+    torch.save(audio_stft, os.path.join(src_dir, 'audio/audio_stft.pt'))
+    
+    return audio_stft
+
+
+def get_mel_spectogram(src_dir):
+    save_path = os.path.join(src_dir, 'audio/audio_mel.pt')
+    audio_path = os.path.join(src_dir, 'audio/audio.wav')
+
+    if os.path.exists(save_path):
+        return torch.load(save_path)
+    
+    wav, sr = librosa.load(audio_path,16000)
+    wav = torch.from_numpy(wav).unsqueeze(0)
+    taco = TacotronSTFT(510, 160, 480, 80, sr, 0, 8000)
+    mel, energy = taco.mel_spectrogram(wav)
+    mel = mel.squeeze()
+    
+    audio_mel = []
+    print('audio pre-processing...')
+    for idx in tqdm(range(mel.shape[-1] // 4)):
+        audio_idx = idx * 4
+        audio_feature_list = []
+        for i in range(audio_idx - 12, audio_idx + 12):
+            if i < 0:
+                audio_feature_list.append(mel[:, 0])
+            elif i >= mel.shape[-1]:
+                audio_feature_list.append(mel[:, -1])
+            else:
+                audio_feature_list.append(mel[:, i])
+                
+        audio_feature = torch.stack(audio_feature_list, 1).float()
+        audio_mel.append(audio_feature.unsqueeze(0))
+    
+    torch.save(audio_mel, save_path)
+    
+    return audio_mel
+
+
 def get_autocorrelation_coefficients(src_dir):
     save_path = os.path.join(src_dir, 'audio/audio_autocorrelation.pt')
     audio_path = os.path.join(src_dir, 'audio/audio.wav')
@@ -273,8 +372,8 @@ def get_autocorrelation_coefficients(src_dir):
     if os.path.exists(save_path):
         return torch.load(save_path)
         
-    waveform, sampleRate = librosa.load(audio_path, 16000, mono=False)
-    waveform = torch.from_numpy(waveform)
+    waveform, sampleRate = librosa.load(audio_path, 16000)
+    waveform = torch.from_numpy(waveform).view(1, -1)
         
     audioFrameLen = int(.008 * 16000 * (64 + 1))
     LPC = lpc.LPCCoefficients(
@@ -295,17 +394,471 @@ def get_autocorrelation_coefficients(src_dir):
             for _ in range(start_idx, 0):
                 indices.append(0)
             indices = indices + list(range(0, end_idx))
-            autocorrelation_coefficients.append(LPC(waveform[0:1, :][:, indices]))
-                                                
+            autocorrelation_coefficients.append(LPC(waveform[:, indices]).transpose(1, 2))
         elif (start_idx > 0) and end_idx < waveform.shape[1]:
-            autocorrelation_coefficients.append(LPC(waveform[0:1, :][:, start_idx:end_idx]))
+            autocorrelation_coefficients.append(LPC(waveform[:, start_idx:end_idx]).transpose(1, 2))
         else:
             indices = list(range(start_idx, waveform.shape[1]))
             for _ in range(waveform.shape[1], end_idx):
                 indices.append(waveform.shape[1] - 1)
-            autocorrelation_coefficients.append(LPC(waveform[0:1, :][:, indices]))
-    
-    autocorrelation_coefficients = torch.stack(autocorrelation_coefficients, dim=0)
+            autocorrelation_coefficients.append(LPC(waveform[:, indices]).transpose(1, 2))
+            
     torch.save(autocorrelation_coefficients, save_path)
-    
     return autocorrelation_coefficients
+
+
+def get_audio_energy_pitch(src_dir):
+    save_path = os.path.join(src_dir, 'audio/audio_energy_pitch.pt')
+    audio_path = os.path.join(src_dir, 'audio/audio.wav')
+
+    if os.path.exists(save_path):
+        return torch.load(save_path)
+    
+    wav, sr = librosa.load(audio_path,16000)
+    torch_wav = torch.from_numpy(wav).unsqueeze(0)
+    taco = TacotronSTFT(510, 160, 480, 80, sr, 0, 8000)
+    mel, energy = taco.mel_spectrogram(torch_wav)
+    
+    pitch, t = pw.dio(
+            wav.astype(np.float64),
+            sr,
+            frame_period=160 / sr * 1000,
+        )
+    pitch = pw.stonemask(wav.astype(np.float64), pitch, t, sr)
+    pitch = torch.tensor(pitch).float().unsqueeze(0)
+    audio_energy = []
+    audio_pitch = []
+    print('audio energy pitch pre-processing...')
+    for idx in tqdm(range(energy.shape[-1] // 4)):
+        audio_idx = idx * 4
+        audio_energy_list = []
+        audio_pitch_list = []
+        
+        for i in range(audio_idx - 12, audio_idx + 12):
+            if i < 0:
+                audio_energy_list.append(energy[:, 0])
+                audio_pitch_list.append(pitch[:, 0])
+            elif i >= energy.shape[-1]:
+                audio_energy_list.append(energy[:, -1])
+                audio_pitch_list.append(pitch[:, -1])
+            else:
+                audio_energy_list.append(energy[:, i])
+                audio_pitch_list.append(pitch[:, i])
+                
+        audio_e = torch.stack(audio_energy_list, 1)
+        audio_p = torch.stack(audio_pitch_list, 1)
+        audio_energy.append(audio_e)
+        audio_pitch.append(audio_p)
+    
+    e_mean = energy.mean(dim=1)
+    e_std = energy.std(dim=1)
+    p_mean = pitch.mean(dim=1)
+    p_std = pitch.std(dim=1)
+    
+    torch.save((audio_energy, audio_pitch, e_mean, e_std, p_mean, p_std), save_path)
+    
+    return audio_energy, audio_pitch, e_mean, e_std, p_mean, p_std
+
+
+def get_viseme_list(src_dir):
+    save_path = os.path.join(src_dir, 'audio/audio_viseme.pt')
+    audio_path = os.path.join(src_dir, 'audio/audio.wav')
+
+    if os.path.exists(save_path):
+        return torch.load(save_path)
+    
+    viseme_mapping = {'spn': 0, 'AA0': 1, 'AA1': 1, 'AA2': 1, \
+                    'AH0': 2, 'AH1': 2, 'AH2': 2, 'HH': 2, \
+                    'AO0': 3, 'AO1': 3, 'AO2': 3, \
+                    'AW0': 4, 'AW1': 4, 'AW2': 4, 'OW0': 4, 'OW1': 4, 'OW2': 4, \
+                    'OY0': 5, 'OY1': 5, 'OY2': 5, 'UH0': 5, 'UH1': 5, 'UH2': 5, 'UW0': 5, 'UW1': 5, 'UW2': 5, \
+                    'EH0': 6, 'EH1': 6, 'EH2': 6, 'AE0': 6, 'AE1': 6, 'AE2': 6, \
+                    'IH0': 7, 'IH1': 7, 'IH2': 7, 'AY0': 7, 'AY1': 7, 'AY2': 7, \
+                    'EY0': 8, 'EY1': 8, 'EY2': 8, \
+                    'Y': 9, 'IY0': 9, 'IY1': 9, 'IY2': 9, \
+                    'R': 10, 'ER0': 10, 'ER1': 10, 'ER2': 10, \
+                    'L': 11, \
+                    'W': 12, \
+                    'M': 13, 'P': 13, 'B': 13, \
+                    'N': 14, 'NG': 14, 'DH': 14, 'D': 14, 'G': 14, 'T': 14, 'Z': 14, 'ZH': 14, 'TH': 14, 'K': 14, 'S': 14, \
+                    'CH': 15, 'JH': 15, 'SH': 15, \
+                    'F': 16, 'V': 16, \
+                    '': 17}
+    
+    wav = librosa.load(audio_path,16000)[0]
+    audio_stft = librosa.stft(wav, n_fft=510, hop_length=160, win_length=480)
+    file_path = os.path.join(src_dir, 'flist.txt')
+    
+    phoneme_list = [None for _ in range(audio_stft.shape[-1])]
+    
+    total_time = 0
+
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            fname = line.split(' ')[-1][1:-5]
+            tg_name = "42_{}.TextGrid".format(fname)
+            tg_path = os.path.join(src_dir, "tcdtimit4_textgrid/{}".format(tg_name))   
+            textgrid = tgt.io.read_textgrid(tg_path, include_empty_intervals=True)
+            tier = textgrid.get_tier_by_name('phones')
+            for t in tier._objects:
+                s, e, p = t.start_time, t.end_time, t.text
+                if int((total_time + e - s) * 100) < len(phoneme_list):
+                    for i in range(int(total_time * 100), int((total_time + e - s) * 100)+1):
+                        phoneme_list[i] = viseme_mapping[p]
+                else:
+                    for i in range(int(total_time * 100), len(phoneme_list)):
+                        phoneme_list[i] = viseme_mapping[p]
+                    
+                total_time += e - s
+    
+    
+    audio_viseme = []
+    print('audio phoneme-viseme pre-processing...')
+    for idx in tqdm(range(len(phoneme_list) // 4)):
+        audio_idx = idx * 4
+        audio_viseme_list = []
+        
+        for i in range(audio_idx - 12, audio_idx + 12):
+            if i < 0:
+                audio_viseme_list.append(phoneme_list[0])
+            elif i >= len(phoneme_list):
+                audio_viseme_list.append(phoneme_list[-1])
+            else:
+                audio_viseme_list.append(phoneme_list[i])
+        
+        one_hot = torch.zeros((18, 24))
+        for i in range(len(audio_viseme_list)):
+            one_hot[audio_viseme_list[i], i]= 1
+        
+        audio_viseme.append(one_hot)
+    torch.save((audio_viseme), save_path)
+    
+    return audio_viseme
+
+
+def get_metadata(src_dir):
+    metadata_path = os.path.join(src_dir, 'metadata.pt')
+    
+    if os.path.exists(metadata_path):
+        return torch.load(metadata_path)
+    
+    image_list = util.get_file_list(os.path.join(src_dir, 'crop'))
+    num_frames = len(image_list)
+
+    phoneme_list = [None for _ in range(num_frames)]
+
+    total_time = 0
+    file_path = os.path.join(src_dir, 'flist.txt')
+
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            fname = line.split(' ')[-1][1:-5]
+            tg_name = "42_{}.TextGrid".format(fname)
+            tg_path = os.path.join(src_dir, "tcdtimit4_textgrid/{}".format(tg_name))   
+            textgrid = tgt.io.read_textgrid(tg_path, include_empty_intervals=True)
+            tier = textgrid.get_tier_by_name('phones')
+            time_in_file = 0
+            
+            for t in tier._objects:
+                s, e, p = t.start_time, t.end_time, t.text
+                if int((total_time + time_in_file + e - s) * 25) < len(phoneme_list):
+                    for i in range(math.ceil((total_time + time_in_file) * 25), int((total_time + time_in_file + e - s) * 25)+1):
+                        phoneme_list[i] = p if p != '' else 'silent'
+                else:
+                    for i in range(math.ceil((total_time + time_in_file) * 25), len(phoneme_list)):
+                        phoneme_list[i] = p if p != '' else 'silent'
+                
+                time_in_file += e - s
+            total_time += int(time_in_file * 60) / 60
+    print(total_time)
+    pho_segs = {}
+    seg_id = 0
+    indices = []
+    current_pho = None
+    current_stress = None
+
+    for idx in range(len(phoneme_list)):
+        orig_pho = phoneme_list[idx]
+        if orig_pho[-1].isalpha():
+            stress = None
+            pho = orig_pho
+        else:
+            stress = int(orig_pho[-1])
+            pho = orig_pho[:-1]
+            
+        if pho not in pho_segs:
+            pho_segs[pho] = []
+        
+        if current_pho != pho:
+            if current_pho == None:
+                current_pho = pho
+                current_stress = stress
+                indices.append(idx)
+            else:
+                segment_item = {
+                    "id": seg_id,
+                    "stress": current_stress,
+                    "indices": indices
+                }
+                pho_segs[current_pho].append(segment_item)
+                current_pho = pho
+                current_stress = stress
+                seg_id +=1
+                indices = []
+                indices.append(idx)
+        else:
+            indices.append(idx)
+    
+    segment_item = {
+        "id": seg_id,
+        "stress" : current_stress,
+        "indices": indices
+    }
+    pho_segs[current_pho].append(segment_item)
+    
+    
+    n_segments = seg_id + 1
+    metadata = {
+        "pho_segs": pho_segs,
+        "n_segments": n_segments
+    }
+    
+    torch.save(metadata, metadata_path)
+    print("metadata saved.")
+    
+    return metadata
+
+def get_concatenation_cost(src_dir):
+    cost_path = os.path.join(src_dir, 'concatenation_cost.pt')
+    
+    if os.path.exists(cost_path):
+        return torch.load(cost_path)
+    
+    metadata = get_metadata(src_dir)
+    n_segments = metadata["n_segments"]
+    delta_list = util.load_coef(os.path.join(src_dir, 'delta'))
+    
+    downsamp_trans = get_downsamp_trans()
+    matlab_data_path = 'renderer/data/data.mat'
+    mat_data = sio.loadmat(matlab_data_path)
+    exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
+    exp_base = torch.mm(downsamp_trans, exp_base).reshape(-1, 64).double()
+        
+    st_deltas = torch.zeros((n_segments, 64))
+    ed_deltas = torch.zeros((n_segments, 64))
+    
+    print("reading segments")
+    for pho in tqdm(metadata["pho_segs"]):
+        for seg in metadata["pho_segs"][pho]:
+            seg_id = seg["id"]
+            st_deltas[seg_id] = delta_list[seg["indices"][0]].squeeze()
+            ed_deltas[seg_id] = delta_list[seg["indices"][-1]].squeeze()
+            
+    print("computing costs")
+    costs = {
+        "l1_err": [],
+        "mse": []
+    }
+    st_deltas = st_deltas.double()
+    ed_deltas = ed_deltas.double()
+    for ed_idx in tqdm(range(n_segments)):
+        ed_delta = ed_deltas[ed_idx].unsqueeze(0)
+        diff = torch.matmul(exp_base, (st_deltas - ed_delta).permute(1, 0))
+        l1_err = torch.mean(torch.abs(diff), dim=0)
+        mse = torch.mean(torch.abs(diff) ** 2, dim=0)
+        costs['l1_err'].append(l1_err)
+        costs['mse'].append(mse)
+    
+    for k in costs:
+        costs[k] = torch.stack(costs[k], dim=0).float().numpy()
+        
+    torch.save(costs, cost_path)
+
+    return costs
+
+
+class ViterbiDecoder():
+    
+    def __init__(self, n_ele, gen_eles, target_cost_fn, concat_cost_mat):
+        # n_ele: int (number of gen_ele in bank)
+        # gen_eles: n_ele-list of gen_ele
+        # target_cost_fn: (gen_ele, target_ele) -> float
+        # concat_cost_mat: (n_ele, n_ele) array
+        self.n_ele = n_ele
+        self.gen_eles = gen_eles
+        self.target_cost_fn = target_cost_fn
+        self.concat_cost_mat = concat_cost_mat
+
+    def decode(self, target, debug=False):
+        # target: T-list of target_ele
+        # ---
+        # result: T-list of int (optimal gen_ele indicies)
+
+        print("preparing Viterbi")
+        # prepare input
+        T = len(target)
+        K = len(self.gen_eles)
+        A = self.concat_cost_mat # [K_prev, K_cur]
+        By = []
+        for target_ele in target:
+            By_t = []
+            for gen_ele in self.gen_eles:
+                By_t.append(self.target_cost_fn(gen_ele, target_ele))
+            By.append(By_t)
+        By = np.array(By) # [T, K]
+
+        # intiialize
+        T1 = np.empty((K, T), 'd') # cost
+        T2 = np.empty((K, T), 'i') # path
+        T1[:, 0] = By[0, :]
+        T2[:, 0] = 0
+
+        print("running Viterbi")
+        for i in range(1, T):
+            T1[:, i] = np.min(T1[np.newaxis, :, i-1] + A.T + By[i, :, np.newaxis], axis=1)
+            # [K_cur] <-min- [K_cur, K_prev] <- [1, K_prev] + [K_cur, K_prev] + [K_cur, 1]
+            T2[:, i] = np.argmin(T1[np.newaxis, :, i-1] + A.T, axis=1)
+
+        x = np.empty(T, 'i')
+        x[-1] = np.argmin(T1[:, T-1])
+        for i in reversed(range(1, T)):
+            x[i-1] = T2[x[i], i]
+
+        result = x
+        print('viterbi done!')
+
+        return result
+    
+    
+class TargetElement(object):
+    def __init__(self, pho, stress, duration):
+        self.pho = pho
+        self.stress = stress
+        self.duration = duration
+
+class GenElement(object):
+    def __init__(self, pho, stress, duration, seg_info):
+        self.pho = pho
+        self.stress = stress
+        self.duration = duration
+        self.seg_info = seg_info
+        
+
+def textgrid2targetseq(tg_path):
+    target_seq = []
+    total_time = 0
+  
+    textgrid = tgt.io.read_textgrid(tg_path, include_empty_intervals=True)
+    tier = textgrid.get_tier_by_name('phones')
+    for t in tier._objects:
+        s, e, p = t.start_time, t.end_time, t.text
+        orig_pho = p if p != '' else 'silent'
+        
+        if orig_pho[-1].isalpha():
+            pho = orig_pho
+            stress = None
+        else:
+            pho = orig_pho[:-1]
+            stress = int(orig_pho[-1])
+        duration = int((total_time + e - s)* 25) - int((total_time * 25))
+        if duration != 0:
+            target_seq.append(TargetElement(pho, stress, duration))
+                
+        total_time += e - s
+    
+    return target_seq
+
+
+def viterbi_algorithm(src_dir, tg_path):
+    
+    target = textgrid2targetseq(tg_path)
+    metadata = get_metadata(src_dir)
+    gen_eles = [None for _ in range(metadata["n_segments"])]
+    cnt = 0
+    for pho in metadata["pho_segs"]:
+        for seg in metadata["pho_segs"][pho]:
+            cnt += 1
+            gen_eles[seg["id"]] = GenElement(pho, seg["stress"], len(seg["indices"]), seg)
+    assert None not in gen_eles
+    
+    phos = set([gen_ele.pho for gen_ele in gen_eles])
+    
+    # define target cost
+    def target_cost_fn(gen_ele, target_ele):
+        cost = 0.0
+        if gen_ele.pho != target_ele.pho:
+            return 100.0
+        if gen_ele.stress != target_ele.stress:
+            cost += 0.1
+
+        dur_weight = 1.0
+        cost += dur_weight * abs(math.log(gen_ele.duration/target_ele.duration)) # < 0.7 for double length
+        return cost
+    
+    costs = get_concatenation_cost(src_dir)
+    concat_cost_mat = 100 * costs["l1_err"]
+    
+    viterbi = ViterbiDecoder(metadata["n_segments"], gen_eles, target_cost_fn, concat_cost_mat)
+    result_idx = viterbi.decode(target)
+    
+    gen_seq = [gen_eles[idx] for idx in result_idx]
+    
+    verbose = True
+    if verbose:
+        last_gen_idx = None
+        for target_ele, gen_ele, gen_idx in zip(target, gen_seq, result_idx):
+            if last_gen_idx is None:
+                concat_cost = None
+            else:
+                concat_cost = concat_cost_mat[last_gen_idx, gen_idx]
+                concat_cost = "{:.3f}".format(concat_cost)
+            last_gen_idx = gen_idx
+            print(f"|{target_ele.pho} {gen_ele.pho} \t| {target_ele.duration} {gen_ele.duration} \t| {concat_cost} \t|{gen_idx}")
+
+    full_delta_list = util.load_coef(os.path.join(src_dir, 'delta'))
+    
+    delta_list = []
+    for target_ele, gen_ele in zip(target, gen_seq):
+        for i in range(target_ele.duration):
+            if target_ele.pho == 'silent':
+                delta_list.append(torch.zeros((64, 1)))            
+            elif (i == (target_ele.duration // 2)):
+                delta_list.append(full_delta_list[gen_ele.seg_info["indices"][gen_ele.duration // 2]])
+            else:
+                delta_list.append(None)
+                
+    interpolated_delta_list = delta_interpolation(delta_list)
+    return interpolated_delta_list
+
+
+def delta_interpolation(delta_list):
+    interpolated_delta_list = []
+
+    prev_delta = None
+    prev_delta_idx = -1
+    for idx in range(len(delta_list)):
+        if delta_list[idx] == None:
+            if idx == (len(delta_list) - 1):
+                for _ in range(prev_delta_idx, idx):
+                    interpolated_delta_list.append(prev_delta)
+            else:
+                continue
+        
+        else:
+            if prev_delta == None:
+                for _ in range(prev_delta_idx, idx):
+                    interpolated_delta_list.append(delta_list[idx])
+                prev_delta = delta_list[idx]
+                prev_delta_idx = idx
+            else:
+                for i in range(idx - prev_delta_idx):
+                    interpolated_delta = delta_list[prev_delta_idx] + (delta_list[idx] - delta_list[prev_delta_idx]) * (i+1) / (idx - prev_delta_idx)
+                    interpolated_delta_list.append(interpolated_delta)
+                prev_delta = delta_list[idx]
+                prev_delta_idx = idx
+    
+    return interpolated_delta_list

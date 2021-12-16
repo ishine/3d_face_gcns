@@ -10,7 +10,7 @@ import argparse
 import math
 from tqdm import tqdm
 import torch
-from lipsync3d.utils import landmark_to_dict, normalized_to_pixel_coordinates
+from lipsync3d.utils import landmark_to_dict, normalized_to_pixel_coordinates, Umeyama_algorithm
 import numpy as np
 import cv2
 import mediapipe as mp
@@ -134,7 +134,7 @@ def pose_normalization(args):
             results = face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
             target_dict = landmark_to_dict(results.multi_face_landmarks[0].landmark)
             target_dict = normalized_to_pixel_coordinates(target_dict, image_cols, image_rows)
-            R, t, c = utils.Umeyama_algorithm(reference_dict, target_dict)
+            R, t, c = Umeyama_algorithm(reference_dict, target_dict)
             target_dict['R'] = R
             target_dict['t'] = t
             target_dict['c'] = c
@@ -167,8 +167,8 @@ def create_dirs(opt):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--data_dir', type=str, default=None)
-    parser.add_argument('--draw_mesh', type=bool, default=False)
-    parser.add_argument('--draw_norm_mesh', type=bool, default=False)
+    parser.add_argument('--draw_mesh', type=bool, default=True)
+    parser.add_argument('--draw_norm_mesh', type=bool, default=True)
     parser.add_argument('--draw_norm_3d_mesh', type=bool, default=False)
     args = parser.parse_args()
 

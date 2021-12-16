@@ -49,6 +49,7 @@ class Options:
 
         self.parser.add_argument('--src_dir', type=str, default=None)
         self.parser.add_argument('--tgt_dir', type=str, default=None)
+        self.parser.add_argument('--tg_path', type=str, default=None)
         self.parser.add_argument('--net_dir', type=str, default=None)
         self.parser.add_argument('--net_name_prefix', type=str, default='')
 

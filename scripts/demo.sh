@@ -5,8 +5,9 @@ set -ex
 # source_dir : directory for inference data, put test audio in source_dir/audio directory
 # video_dir : path for training video
 
-target_dir="data/kkj/kkj04_short"
-source_dir="data/kkj/kkj04_short"
+target_dir="data/tcdtimit4"
+source_dir="data/tcdtimit4"
+tg_audio_path="data/tcdtimit_test/sx97_audio.wav"
 # video_dir="data/kkj/kkj04_short/KKJ04_short.mp4"
 
 
@@ -39,41 +40,41 @@ end_time="240"
 # # crop and resize video frames
 # python audiodvp_utils/crop_portrait.py \
 #     --data_dir $target_dir \
-#     --crop_level 1.5 \
+#     --crop_level 1.2 \
 #     --vertical_adjust 0.2
 
 # pose normalization
 # python lipsync3d/pose_normalization.py --data_dir $target_dir
 
-# # 3D face reconstruction
+# 3D face reconstruction
 # python train.py \
 #     --data_dir $target_dir \
-#     --num_epoch 25 \
+#     --num_epoch 50 \
 #     --serial_batches False \
 #     --display_freq 200 \
 #     --print_freq 200 \
 #     --batch_size 5 \
-#     --epoch_tex 5 \
-#     --epoch_warm_up 10
+#     --epoch_tex 10 \
+#     --epoch_warm_up 15
 
 
 # build neural face renderer data pair
-# python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
+python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
 
-# /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-#     -thread_queue_size 8192 -i $target_dir/nfr/A/train/%05d.png \
-#     -thread_queue_size 8192 -i $target_dir/mask/%05d.png \
-#     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
-#     -i $target_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/nfr_dataset_debug.mp4
+/usr/bin/ffmpeg -hide_banner -y -loglevel warning \
+    -thread_queue_size 8192 -i $target_dir/nfr/A/train/%05d.png \
+    -thread_queue_size 8192 -i $target_dir/mask/%05d.png \
+    -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
+    -i $target_dir/audio/audio.wav \
+    -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/nfr_dataset_debug.mp4
 
 
 # train neural face renderer
-python vendor/neural_face_renderer/train.py \
-    --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
-    --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
-    --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
-    --n_epochs_decay 0 --load_size 256
+# python vendor/neural_face_renderer/train.py \
+#     --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
+#     --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
+#     --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
+#     --n_epochs_decay 0 --load_size 256
 
 
 # # # train audio2delta network
@@ -101,7 +102,7 @@ python vendor/neural_face_renderer/train.py \
 # python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
 # choose best epoch with lowest loss
-# epoch=25
+# epoch=100
 
 # neural rendering the reenact face sequence
 # python vendor/neural_face_renderer/test.py --model test \
@@ -116,7 +117,7 @@ python vendor/neural_face_renderer/train.py \
 #     --use_refine \
 #     --name nfr \
 #     --checkpoints_dir $target_dir/ckpts \
-#     --dataroot $source_dir/reenact \
+#     --dataroot $source_dir/reenact_tg/42_sx97 \
 #     --results_dir $source_dir \
 #     --epoch $epoch
 
@@ -124,7 +125,7 @@ python vendor/neural_face_renderer/train.py \
 # python comp.py --src_dir $source_dir --tgt_dir $target_dir
 
 # create final result
-# mkdir -p $source_dir/results
+# mkdir -p $target_dir/results
 
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $source_dir/images/%05d_real.png \
@@ -139,12 +140,18 @@ python vendor/neural_face_renderer/train.py \
 #     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/debug.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/render/%05d.png \
+#     -thread_queue_size 8192 -i $target_dir/render/%05d.png \
 #     -thread_queue_size 8192 -i $target_dir/overlay/%05d.png \
-#     -i $source_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/face_reconstruction_result_whole_model_25.mp4
+#     -i $target_dir/audio/audio.wav \
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/face_reconstruction_result_whole_model_25.mp4
 
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $target_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $target_dir/reenact/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $target_dir/results/reenact_self.mp4
+#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/render_audio2geometry_no_emotion.mp4
+
+
+# ffmpeg -y -loglevel warning \
+#     -thread_queue_size 8192 -i $tg_audio_path\
+#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/render_viterbi_sx97_interpolation.mp4

@@ -9,7 +9,7 @@ from lib.mesh_io import read_obj
 from gcn_util.utils import init_sampling
 from renderer.mesh_refiner import ChebConv, ChebResBlock
 import scipy.io as sio
-from utils import get_downsamp_trans
+from lipsync3d.utils import get_downsamp_trans, get_train_data_statistic
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -226,12 +226,14 @@ class MeshDecoderModel(nn.Module):
 
 
 class Audio2GeometryModel(nn.Module):
-    def __init__(self, opt, moodSize=12000, refer_idx=31):
+    def __init__(self, opt, moodSize=8924, refer_idx=31):
         super(Audio2GeometryModel, self).__init__()
         self.device = opt.device
         self.refer_idx = refer_idx
+        self.mean, self.scale, self.components = get_train_data_statistic(opt)
+        
         self.formantAnalysis = nn.Sequential(
-            nn.Conv2d(in_channels=2,out_channels=72, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),   # 2 x 256 x 24 -> 72 x 128 x 24
+            nn.Conv2d(in_channels=2,out_channels=72, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),   # 2 x 256 x 24 -> 72 x 128 x 24      
             nn.LeakyReLU(),
             nn.Conv2d(in_channels=72,out_channels=108, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 72 x 128 x 24 -> 108 x 64 x 24
             nn.LeakyReLU(),
@@ -239,40 +241,57 @@ class Audio2GeometryModel(nn.Module):
             nn.LeakyReLU(),
             nn.Conv2d(in_channels=162,out_channels=243, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 162 x 32 x 24 -> 243 x 16 x 24
             nn.LeakyReLU(),
-            nn.Conv2d(in_channels=243,out_channels=256, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 243 x 16 x 24 -> 256 x 8 x 24
+            nn.Conv2d(in_channels=243,out_channels=256, kernel_size=(4, 1), stride=(4, 1), padding=(0, 0), dilation=1),    # 243 x 16 x 24 -> 256 x 4 x 24
             nn.LeakyReLU(),
-            nn.Conv2d(in_channels=256,out_channels=256, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 256 x 8 x 24 -> 256 x 4 x 24
+            nn.Conv2d(in_channels=256,out_channels=256, kernel_size=(4, 1), stride=(4, 1), padding=(0, 0), dilation=1),    # 256 x 4 x 24 -> 256 x 1 x 24
             nn.LeakyReLU(),
         )
         
-        self.moodlen = 16
+        # self.formantAnalysis = nn.Sequential(
+        #     nn.Conv2d(in_channels=1,out_channels=72, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),   # 1 x 80 x 24 -> 72 x 40 x 24      
+        #     nn.LeakyReLU(),
+        #     nn.Conv2d(in_channels=72,out_channels=108, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 72 x 40 x 24 -> 108 x 20 x 24
+        #     nn.LeakyReLU(),
+        #     nn.Conv2d(in_channels=108,out_channels=162, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 108 x 20 x 24 -> 162 x 10 x 24
+        #     nn.LeakyReLU(),
+        #     nn.Conv2d(in_channels=162,out_channels=243, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 162 x 10 x 24 -> 243 x 5 x 24
+        #     nn.LeakyReLU(),
+        #     nn.Conv2d(in_channels=243,out_channels=256, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 243 x 5 x 24 -> 256 x 3 x 24
+        #     nn.LeakyReLU(),
+        #     nn.Conv2d(in_channels=256,out_channels=256, kernel_size=(3, 1), stride=(2, 1), padding=(0, 0), dilation=1),    # 256 x 3 x 24 -> 256 x 1 x 24
+        #     nn.LeakyReLU(),
+        # )
+        
+        
+        
+        self.moodlen = opt.moodlen
         mood = np.random.normal(.0, 0.01, (moodSize, self.moodlen))
         self.mood = nn.Parameter(
             torch.from_numpy(mood).float().view(moodSize, self.moodlen).to(self.device),
             requires_grad=True
         )
+        # self.mood = torch.zeros((moodSize, self.moodlen)).to(self.device)
         
-        self.articulation = nn.Sequential(
-            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256 + self.moodlen, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 4 x 24 -> (256+E) x 4 x 13
-            nn.LeakyReLU(),
-            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256 + self.moodlen, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 4 x 13 -> (256+E) x 4 x 8
-            nn.LeakyReLU(),
-            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256 + self.moodlen, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 4 x 8 -> (256+E) x 4 x 5
-            nn.LeakyReLU(),
-            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256 + self.moodlen, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 4 x 5 -> (256+E) x 4 x 4
-            nn.LeakyReLU(),
-            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256 + self.moodlen, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), dilation=1),    # (256+E) x 4 x 4 -> (256+E) x 4 x 2
-            nn.LeakyReLU(),
-            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256 + self.moodlen, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), dilation=1),     # (256+E) x 4 x 2 -> (256+E) x 4 x 1
-            nn.LeakyReLU(),
-            View([-1, (256 + self.moodlen) * 4])
-        )
         
-        self.articulation_layer1 = 
+        self.articulation_layers = nn.ModuleList([
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 24 -> (256) x 1 x 13
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 13 -> (256) x 1 x 8
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), dilation=1),    # (256+E) x 1 x 8 -> (256) x 1 x 4
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 4), stride=(1, 1), padding=(0, 0), dilation=1),    # (256+E) x 1 x 4 -> (256) x 1 x 1
+        ])
+        
+        # self.articulation_layers = nn.ModuleList([
+        #     nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 24 -> (256) x 1 x 13
+        #     nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 13 -> (256) x 1 x 8
+        #     nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 8 -> (256) x 1 x 5
+        #     nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), dilation=1),    # (256+E) x 1 x 5 -> (256) x 1 x 3
+        #     nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 1), padding=(0, 0), dilation=1),    # (256+E) x 1 x 3 -> (256) x 1 x 1
+        # ])
+        
+        self.LeakyReLU = nn.LeakyReLU()
 
-        self.fc1 =  nn.Linear((256 + self.moodlen) * 4, 150)
-        self.tanh = nn.Tanh()
-        self.fc2 = nn.Linear(150, 442*3)
+        self.fc1 =  nn.Linear(256 + self.moodlen, 150)
+        self.fc2 = nn.Linear(150, 442*3, bias=False)
         
         self.init_fc_layers()        
 
@@ -284,10 +303,9 @@ class Audio2GeometryModel(nn.Module):
         # nn.init.xavier_normal_(self.decoder_fc.weight, gain=nn.init.calculate_gain('relu'))
         # nn.init.zeros_(self.decoder_fc.bias)
 
-        nn.init.xavier_normal_(self.fc1.weight, gain=nn.init.calculate_gain('tanh'))
+        nn.init.zeros_(self.fc1.weight)
         nn.init.zeros_(self.fc1.bias)
-        nn.init.zeros_(self.fc2.weight)
-        nn.init.zeros_(self.fc2.bias)
+        self.fc2.weight = nn.Parameter(self.components)
 
     def forward(self, spec, moodIdx=None):
         # input : spec( B x 2 x 256 x 24 )
@@ -295,15 +313,105 @@ class Audio2GeometryModel(nn.Module):
         B = spec.size()[0]
         if moodIdx==None:
             moodIdx = self.refer_idx * torch.ones((B), dtype=torch.long).to(self.device)
-        formant_latent = self.formantAnalysis(spec)
-        articulation_input = torch.cat((formant_latent,
-                self.mood[moodIdx.chunk(chunks=1, dim=0)].view(B, self.moodlen, 1, 1).expand(B, self.moodlen, 4, 24)),
-                dim=1        
-        ).view(B, 256 + self.moodlen, 4, 24)
-        audio_latent = self.articulation(articulation_input)
-        exp_diff = self.fc2(self.tanh(self.fc1(audio_latent))).view(-1, 442, 3)
-
+        out = self.formantAnalysis(spec)
+        
+        for layer in self.articulation_layers:
+            B, _, H, W = out.shape
+            mood = self.mood[moodIdx.chunk(chunks=1, dim=0)].view(B, self.moodlen, 1, 1).expand(B, self.moodlen, H, W)
+            out = layer(torch.cat((out, mood), dim=1))
+            out = self.LeakyReLU(out)
+        
+        B, _, H, W = out.shape
+        mood = self.mood[moodIdx.chunk(chunks=1, dim=0)].view(B, self.moodlen, 1, 1).expand(B, self.moodlen, H, W)
+        out = torch.cat((out, mood), dim=1)
+        audio_latent = out.view(B, -1)
+        
+        exp_diff = self.fc2(self.fc1(audio_latent))
+        exp_diff = (exp_diff * self.scale + self.mean).view(-1, 442, 3)
         return exp_diff
 
     
+class Audio2GeometrywithEnergyPitchModel(nn.Module):
+    def __init__(self, opt, moodSize=8924, refer_idx=31):
+        super(Audio2GeometrywithEnergyPitchModel, self).__init__()
+        self.device = opt.device
+        self.refer_idx = refer_idx
+        self.mean, self.scale, self.components = get_train_data_statistic(opt)
+        
+        self.formantAnalysis = nn.Sequential(
+            nn.Conv2d(in_channels=2,out_channels=72, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),   # 2 x 256 x 24 -> 72 x 128 x 24      
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=72,out_channels=108, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 72 x 128 x 24 -> 108 x 64 x 24
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=108,out_channels=162, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 108 x 64 x 24 -> 162 x 32 x 24
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=162,out_channels=243, kernel_size=(3, 1), stride=(2, 1), padding=(1, 0), dilation=1),    # 162 x 32 x 24 -> 243 x 16 x 24
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=243,out_channels=256, kernel_size=(4, 1), stride=(4, 1), padding=(0, 0), dilation=1),    # 243 x 16 x 24 -> 256 x 4 x 24
+            nn.LeakyReLU(),
+            nn.Conv2d(in_channels=256,out_channels=256, kernel_size=(4, 1), stride=(4, 1), padding=(0, 0), dilation=1),    # 256 x 4 x 24 -> 256 x 1 x 24
+            nn.LeakyReLU(),
+        )
+        
+        self.moodlen = opt.moodlen
+        mood = np.random.normal(.0, 0.01, (moodSize, self.moodlen))
+        self.mood = nn.Parameter(
+            torch.from_numpy(mood).float().view(moodSize, self.moodlen).to(self.device),
+            requires_grad=True
+        )
+        
+        self.articulation_layers = nn.ModuleList([
+            nn.Conv2d(in_channels=256 + self.moodlen + 64,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 24 -> (256) x 1 x 13
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 2), dilation=1),    # (256+E) x 1 x 13 -> (256) x 1 x 8
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1), dilation=1),    # (256+E) x 1 x 8 -> (256) x 1 x 4
+            nn.Conv2d(in_channels=256 + self.moodlen,out_channels=256, kernel_size=(1, 4), stride=(1, 1), padding=(0, 0), dilation=1),    # (256+E) x 1 x 4 -> (256) x 1 x 1
+        ])
+        
+        
+        self.LeakyReLU = nn.LeakyReLU()
+
+        self.linear_embedding = nn.Linear(20, 64)
+        
+        self.fc1 =  nn.Linear(256 + self.moodlen, 150)
+        self.fc2 = nn.Linear(150, 442*3, bias=False)
+        
+        self.init_fc_layers()        
+
     
+    def init_fc_layers(self):
+        # nn.init.zeros_(self.last_fc.weight)
+        # nn.init.zeros_(self.last_fc.bias)
+
+        # nn.init.xavier_normal_(self.decoder_fc.weight, gain=nn.init.calculate_gain('relu'))
+        # nn.init.zeros_(self.decoder_fc.bias)
+
+        nn.init.zeros_(self.fc1.weight)
+        nn.init.zeros_(self.fc1.bias)
+        self.fc2.weight = nn.Parameter(self.components)
+
+    def forward(self, spec, viseme, energy, pitch, moodIdx=None):
+        # input : spec( B x 2 x 256 x 24 )
+        # output : geometry ( B x 478 x 3)
+        B = spec.size()[0]
+        if moodIdx==None:
+            moodIdx = self.refer_idx * torch.ones((B), dtype=torch.long).to(self.device)
+        out = self.formantAnalysis(spec)
+        
+        ep = torch.cat((viseme, energy, pitch), dim=1).permute(0, 2, 1)
+        ep = self.linear_embedding(ep).permute(0, 2, 1).unsqueeze(2)
+        out = torch.cat((out, ep), dim=1)
+        
+        for layer in self.articulation_layers:
+            B, _, H, W = out.shape
+            mood = self.mood[moodIdx.chunk(chunks=1, dim=0)].view(B, self.moodlen, 1, 1).expand(B, self.moodlen, H, W)
+            out = layer(torch.cat((out, mood), dim=1))
+            out = self.LeakyReLU(out)
+        
+        B, _, H, W = out.shape
+        mood = self.mood[moodIdx.chunk(chunks=1, dim=0)].view(B, self.moodlen, 1, 1).expand(B, self.moodlen, H, W)
+        out = torch.cat((out, mood), dim=1)
+        audio_latent = out.view(B, -1)
+        
+        exp_diff = self.fc2(self.fc1(audio_latent))
+        exp_diff = (exp_diff * self.scale + self.mean).view(-1, 442, 3)
+        return exp_diff
