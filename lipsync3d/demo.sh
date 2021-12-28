@@ -11,7 +11,7 @@ tg_audio_path="data/tcdtimit_test/sx97_audio.wav"
 # mesh_dir="data/kkj/kkj04_lipsync3d/mesh_dict"
 # reenact_mesh_dir="data/kkj/kkj04_lipsync3d/reenact_norm_mesh"
 # target_dir="data/kkj/kkj04_lipsync3d"
-# target_dir="data/tcdtimit4_datadir"
+target_dir="data/tcdtimit4"
 source_dir="data/tcdtimit4"
 # video_dir="data/kkj/TTS_E/a-cough-nose.mp4"
 
@@ -36,10 +36,10 @@ end_time="240"
 # ffmpeg -hide_banner -y -i $video_dir -ar 16000 $source_dir/audio/audio.wav
 
 # # crop and resize video frames
-# python audiodvp_utils/crop_portrait.py \
-#     --data_dir $target_dir \
-#     --crop_level 1.5 \
-#     --vertical_adjust 0.2
+python audiodvp_utils/crop_portrait.py \
+    --data_dir $target_dir \
+    --crop_level 1.5 \
+    --vertical_adjust 0.2
 
 # pose normalization
 # python lipsync3d/pose_normalization.py --data_dir $target_dir
@@ -123,7 +123,7 @@ end_time="240"
 
 # python reenact.py --src_dir $source_dir --tgt_dir $bfm_dir
 
-python reenact_tg.py --tgt_dir $bfm_dir --tg_path $tg_path
+# python reenact_tg.py --tgt_dir $bfm_dir --tg_path $tg_path
 
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
@@ -131,7 +131,7 @@ python reenact_tg.py --tgt_dir $bfm_dir --tg_path $tg_path
 #     -i $source_dir/audio/audio.wav \
 #     -filter_complex hstack=inputs=2 -shortest -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/self_reenact_stft_viseme_energy_pitch.mp4
 
-ffmpeg -y -loglevel warning \
-    -thread_queue_size 8192 -i $tg_audio_path\
-    -thread_queue_size 8192 -i $bfm_dir/reenact_tg/42_sx97/%05d.png \
-    -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $bfm_dir/results/reenact_viterbi_sx97_interpolation.mp4
+# ffmpeg -y -loglevel warning \
+#     -thread_queue_size 8192 -i $tg_audio_path\
+#     -thread_queue_size 8192 -i $bfm_dir/reenact_tg/42_sx97/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $bfm_dir/results/reenact_viterbi_sx97_interpolation.mp4

@@ -59,22 +59,22 @@ end_time="240"
 
 
 # build neural face renderer data pair
-python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
+# python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
 
-/usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-    -thread_queue_size 8192 -i $target_dir/nfr/A/train/%05d.png \
-    -thread_queue_size 8192 -i $target_dir/mask/%05d.png \
-    -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
-    -i $target_dir/audio/audio.wav \
-    -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/nfr_dataset_debug.mp4
+# /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
+#     -thread_queue_size 8192 -i $target_dir/nfr/A/train/%05d.png \
+#     -thread_queue_size 8192 -i $target_dir/mask/%05d.png \
+#     -thread_queue_size 8192 -i $target_dir/nfr/B/train/%05d.png \
+#     -i $target_dir/audio/audio.wav \
+#     -filter_complex hstack=inputs=3 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/nfr_dataset_debug.mp4
 
 
 # train neural face renderer
-# python vendor/neural_face_renderer/train.py \
-#     --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
-#     --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
-#     --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
-#     --n_epochs_decay 0 --load_size 256
+python vendor/neural_face_renderer/train.py \
+    --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
+    --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
+    --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
+    --n_epochs_decay 0 --load_size 256
 
 
 # # # train audio2delta network
