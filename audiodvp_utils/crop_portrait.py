@@ -166,9 +166,7 @@ def normalize_and_crop_lip_region(data_dir):
         (x, y, w, h) = cv2.boundingRect(lip_landmark)
         resized_roi = np.zeros((256, 256, 3), dtype=int)
         roi = output[y:y + h, x:x + w]
-        roi = imutils.resize(roi, width=256, inter=cv2.INTER_CUBIC)
-        h, w, _ = roi.shape
-        resized_roi[:h, :, :] = roi
+        resized_roi[:h, :w, :] = roi
         
         cv2.imwrite(os.path.join(data_dir, 'crop_lip', os.path.basename(image_list[i])), resized_roi)
 

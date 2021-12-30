@@ -86,7 +86,6 @@ class NLayerDiscriminator(BaseNetwork):
         #padw = int(np.ceil((kw - 1.0) / 2))
         padw = int((kw - 1.0) / 2)
         nf = opt.ndf
-        # input_nc = self.compute_D_input_nc(opt)
         input_nc = opt.semantic_nc + 3
 
         norm_layer = get_nonspade_norm_layer(opt, opt.norm_D)
@@ -130,11 +129,6 @@ class NLayerDiscriminator(BaseNetwork):
         for n in range(len(sequence)):
             self.add_module('model' + str(n), nn.Sequential(*sequence[n]))
 
-    def compute_D_input_nc(self, opt):
-        input_nc = opt.label_nc + opt.output_nc
-        if opt.contain_dontcare_label:
-            input_nc += 1
-        return input_nc
 
     def forward(self, input):
         results = [input]

@@ -34,12 +34,13 @@ class BaseOptions():
         parser.add_argument('--ot_weight', action='store_true', help='use euc distance as weight of ot')
 
         # input/output sizes
-        parser.add_argument('--batchSize', type=int, default=4, help='input batch size')
+        parser.add_argument('--batch_size', type=int, default=4, help='input batch size')
         parser.add_argument('--preprocess_mode', type=str, default='scale_width_and_crop', help='scaling and cropping of images at load time.', choices=("resize_and_crop", "crop", "scale_width", "scale_width_and_crop", "scale_shortside", "scale_shortside_and_crop", "fixed", "none"))
         parser.add_argument('--load_size', type=int, default=256, help='Scale images to this size. The final image will be cropped to --crop_size.')
         parser.add_argument('--crop_size', type=int, default=256, help='Crop to the width of crop_size (after initially scaling the images to load_size.)')
         parser.add_argument('--aspect_ratio', type=float, default=1.0, help='The ratio width/height. The final height of the load image will be crop_size/aspect_ratio')
-        parser.add_argument('--label_nc', type=int, default=182, help='# of input label classes without unknown class. If you have unknown class as class label, specify --contain_dopntcare_label.')
+        parser.add_argument('--semantic_nc', type=int, default=21, help='# of input semantic channels')
+        parser.add_argument('--ref_nc', type=int, default=3, help='# of input ref image channels.')
         parser.add_argument('--contain_dontcare_label', action='store_true', help='if the label map contains dontcare label (dontcare=255)')
         parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')
 
@@ -53,7 +54,8 @@ class BaseOptions():
         parser.add_argument('--load_from_opt_file', action='store_true', help='load the options from checkpoints and use that as default')
         parser.add_argument('--cache_filelist_write', action='store_true', help='saves the current filelist into a text file, so that it loads faster')
         parser.add_argument('--cache_filelist_read', action='store_true', help='reads from the file list cache')
-
+        parser.add_argument('--preprocess', type=str, default='resize_and_crop', help='scaling and cropping of images at load time [resize_and_crop | crop | scale_width | scale_width_and_crop | none]')
+        
         # for displays
         parser.add_argument('--display_winsize', type=int, default=400, help='display window size')
 
@@ -183,11 +185,6 @@ class BaseOptions():
         if opt.isTrain:
             self.save_options(opt)
 
-        # Set semantic_nc based on the option.
-        # This will be convenient in many places
-        opt.semantic_nc = opt.label_nc + \
-            (1 if opt.contain_dontcare_label else 0)
-
         # set gpu ids
         str_ids = opt.gpu_ids.split(',')
         opt.gpu_ids = []
@@ -198,7 +195,7 @@ class BaseOptions():
         if len(opt.gpu_ids) > 0:
             torch.cuda.set_device(opt.gpu_ids[0])
 
-        assert len(opt.gpu_ids) == 0 or opt.batchSize % len(opt.gpu_ids) == 0, \
+        assert len(opt.gpu_ids) == 0 or opt.batch_size % len(opt.gpu_ids) == 0, \
             "Batch size %d is wrong. It must be a multiple of # GPUs %d." \
             % (opt.batchSize, len(opt.gpu_ids))
 

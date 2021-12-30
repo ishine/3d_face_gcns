@@ -38,21 +38,14 @@ class Pix2PixTrainer():
                 if param.requires_grad:
                     self.netCorr_ema.register(name, param.data)
 
-        self.generated = None
         if opt.isTrain:
             self.optimizer_G, self.optimizer_D = \
                 self.pix2pix_model_on_one_gpu.create_optimizers(opt)
             self.old_lr = opt.lr
-            # if opt.continue_train and opt.which_epoch == 'latest':
-            #     checkpoint = torch.load(os.path.join(opt.checkpoints_dir, opt.name, 'optimizer.pth'))
-            #     self.optimizer_G.load_state_dict(checkpoint['G'])
-            #     self.optimizer_D.load_state_dict(checkpoint['D'])
 
-        self.last_data, self.last_netCorr, self.last_netG, self.last_optimizer_G = None, None, None, None
-
-    def run_generator_one_step(self, data, alpha=1):
+    def run_generator_one_step(self, data):
         self.optimizer_G.zero_grad()
-        g_losses, out = self.pix2pix_model(data, mode='generator', alpha=alpha)
+        g_losses, out = self.pix2pix_model(data, mode='generator')
 
         g_loss = sum(g_losses.values()).mean()
         g_loss.backward()
@@ -63,22 +56,10 @@ class Pix2PixTrainer():
             self.netG_ema(self.pix2pix_model_on_one_gpu.net['netG'])
             self.netCorr_ema(self.pix2pix_model_on_one_gpu.net['netCorr'])
 
-    # def run_correspondence_one_step(self, data, alpha=1):
-    #     # self.optimizer_G.zero_grad()
-    #
-    #     self.optimizer_C.zero_grad()
-    #     _, _, c_losses = self.pix2pix_model(data, mode='generator', alpha=alpha)
-    #     c_loss = sum(c_losses.values()).mean()
-    #     c_loss.backward()
-    #     self.optimizer_C.step()
-    #     self.c_losses = c_losses
-
     def run_discriminator_one_step(self, data):
         self.optimizer_D.zero_grad()
         GforD = {}
         GforD['fake_image'] = self.out['fake_image']
-        GforD['adaptive_feature_seg'] = self.out['adaptive_feature_seg']
-        GforD['adaptive_feature_img'] = self.out['adaptive_feature_img']
         d_losses = self.pix2pix_model(data, mode='discriminator', GforD=GforD)
         d_loss = sum(d_losses.values()).mean()
         d_loss.backward()

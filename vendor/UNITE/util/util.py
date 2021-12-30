@@ -14,12 +14,39 @@ import sys
 import argparse
 import scipy.io as scio
 import matplotlib
+from tqdm import tqdm
 #from numba import u1, u2, jit
 
 # returns a configuration for creating a generator
 # |default_opt| should be the opt of the current experiment
 # |**kwargs|: if any configuration should be overriden, it can be specified here
 
+
+def get_file_list(data_dir, suffix=""):
+    file_list = []
+
+    for dirpath, _, filenames in os.walk(data_dir):
+        for filename in filenames:
+            if suffix in filename:
+                file_list.append(os.path.join(dirpath, filename))
+
+    file_list = sorted(file_list)
+
+    return file_list
+
+
+def load_coef(data_dir, load_num=float('inf')):
+    coef_list = []
+    count = 0
+
+    for filename in tqdm(get_file_list(data_dir)):
+        coef = torch.load(filename)
+        coef_list.append(coef)
+        count += 1
+        if count >= load_num:
+            break
+
+    return coef_list
 
 
 def id2rgb(id):
@@ -336,18 +363,13 @@ class Colorize(object):
 
         return color_image
 
-def print_current_errors(opt, epoch, i, errors, t):
+def print_current_errors(epoch, i, errors, t):
     message = '(epoch: %d, iters: %d, time: %.3f) ' % (epoch, i, t)
     for k, v in errors.items():
-        #print(v)
-        #if v != 0:
         v = v.mean().float()
         message += '%s: %.3f ' % (k, v)
 
     print(message)
-    log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
-    with open(log_name, "a") as log_file:
-        log_file.write('%s\n' % message)
 
 
 def getCMap(stuffStartId=1, stuffEndId=182, cmapName='jet', addThings=True, addUnlabeled=True, addOther=True):

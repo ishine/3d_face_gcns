@@ -14,6 +14,8 @@ from models import networks
 from options.options import Options
 from audiodvp_utils.util import create_dir, load_coef, get_file_list, load_face_emb, get_max_crop_region
 from audiodvp_utils.rescale_image import rescale_and_paste
+import face_alignment
+import torch
 
 
 if __name__ == '__main__':
@@ -58,7 +60,9 @@ if __name__ == '__main__':
 
     create_dir(os.path.join(opt.data_dir, 'nfr', 'A', 'train'))
     create_dir(os.path.join(opt.data_dir, 'nfr', 'B', 'train'))
-
+    create_dir(os.path.join(opt.data_dir, 'nfr', 'lip_region'))
+    fa_3d = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, flip_input=False, device='cuda')
+    
     masks = get_file_list(os.path.join(opt.data_dir, 'mask'))
     renders = get_file_list(os.path.join(opt.data_dir, 'render'))
 
@@ -76,12 +80,20 @@ if __name__ == '__main__':
         
         rescaled_crop = full[top:bottom, left:right]
         rescaled_crop = cv2.resize(rescaled_crop, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
+        preds = fa_3d.get_landmarks(rescaled_crop)
+        lip_landmark = preds[0][:, :2][48:].astype(int)
+        (x, y, w, h) = cv2.boundingRect(lip_landmark)
+        
+        roi = rescaled_crop [y:y + h, x:x + w]
+        cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'crop_lip.png'), roi)
         
         masked_crop = cv2.bitwise_and(rescaled_crop, mask)
         masked_render = cv2.bitwise_and(rescaled_render, mask)
 
         cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'A', 'train', '%05d.png' % (i+1)), masked_crop)
         cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'B', 'train', '%05d.png' % (i+1)), masked_render)
+        torch.save([y, y + h, x, x + w], os.path.join(opt.data_dir, 'nfr', 'lip_region', '%05d.pt' % (i + 1)))
+
 
     splits = os.listdir(os.path.join(opt.data_dir, 'nfr', 'A'))
 

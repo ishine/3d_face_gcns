@@ -200,7 +200,7 @@ class BaseModel(ABC):
                     self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
                 net.load_state_dict(state_dict)
 
-    def print_networks(self, verbose):
+    def print_networks(self, verbose=False):
         """Print the total number of parameters in the network and (if verbose) network architecture
 
         Parameters:

@@ -70,11 +70,40 @@ end_time="240"
 
 
 # train neural face renderer
-python vendor/neural_face_renderer/train.py \
-    --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
-    --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
-    --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
-    --n_epochs_decay 0 --load_size 256
+# python vendor/neural_face_renderer/train.py \
+#     --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
+#     --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
+#     --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
+#     --n_epochs_decay 0 --load_size 256
+
+
+# ---------- train UNITE neura lface renderer ----------
+python3 vendor/UNITE/train.py \
+	--name tcdtimit4 \
+	--dataset_mode exemplar_train \
+	--dataroot $target_dir \
+    --checkpoints_dir $target_dir/ckpts \
+	--correspondence 'ot' \
+    --Nw 7 \
+    --preprocess none \
+    --num_threads 4 \
+	--display_freq 1000 \
+	--niter 150 \
+	--niter_decay 150 \
+	--use_attention \
+	--weight_mask 100.0 \
+	--warp_self_w 100.0 \
+	--warp_cycle_w 1 \
+	--vgg_normal_correct \
+	--fm_ratio 1.0 \
+	--PONO \
+	--PONO_C \
+	--use_coordconv \
+	--adaptor_nonlocal \
+	--ctx_w 1.0 \
+	--batch_size 4 \
+	--gpu_ids 0,1,2,3
+
 
 
 # # # train audio2delta network

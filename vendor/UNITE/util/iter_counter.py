@@ -43,11 +43,11 @@ class IterationCounter():
         current_time = time.time()
 
         # the last remaining batch is dropped (see data/__init__.py),
-        # so we can assume batch size is always opt.batchSize
-        self.time_per_iter = (current_time - self.last_iter_time) / self.opt.batchSize
+        # so we can assume batch size is always opt.batch_size
+        self.time_per_iter = (current_time - self.last_iter_time) / self.opt.batch_size
         self.last_iter_time = current_time
-        self.total_steps_so_far += self.opt.batchSize
-        self.epoch_iter += self.opt.batchSize
+        self.total_steps_so_far += self.opt.batch_size
+        self.epoch_iter += self.opt.batch_size
 
     def record_epoch_end(self):
         current_time = time.time()
@@ -65,10 +65,10 @@ class IterationCounter():
         print('Saved current iteration count at %s.' % self.iter_record_path)
 
     def needs_saving(self):
-        return (self.total_steps_so_far % self.opt.save_latest_freq) < self.opt.batchSize
+        return (self.total_steps_so_far % self.opt.save_latest_freq) < self.opt.batch_size
 
     def needs_printing(self):
-        return (self.total_steps_so_far % self.opt.print_freq) < self.opt.batchSize
+        return (self.total_steps_so_far % self.opt.print_freq) < self.opt.batch_size
 
     def needs_displaying(self):
-        return (self.total_steps_so_far % self.opt.display_freq) < self.opt.batchSize
+        return (self.total_steps_so_far % self.opt.display_freq) < self.opt.batch_size

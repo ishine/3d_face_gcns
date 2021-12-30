@@ -157,36 +157,31 @@ class NoVGGCorrespondence(BaseNetwork):
         self.uot = SamplesLoss("sinkhorn", p=self.p, blur=self.blur,
                                       debias=False, potentials=True)
 
-        opt.spade_ic = opt.semantic_nc
-        self.adaptive_model_seg = AdaptiveFeatureGenerator(opt)
-        opt.spade_ic = 3
-        self.adaptive_model_img = AdaptiveFeatureGenerator(opt)
-        del opt.spade_ic
+        self.adaptive_model_seg = AdaptiveFeatureGenerator(opt, opt.semantic_nc)
+        self.adaptive_model_img = AdaptiveFeatureGenerator(opt, opt.ref_nc)
         if opt.weight_domainC > 0 and (not opt.domain_rela):
             self.domain_classifier = DomainClassifier(opt)
-
 
         self.down = opt.warp_stride # 4
 
         self.feat_ch = 64
         self.cor_dim = 256
-        label_nc = opt.semantic_nc if opt.maskmix else 0
         coord_c = 3 if opt.use_coordconv else 0
 
         self.layer = nn.Sequential(
-            ResidualBlock(self.feat_ch * 4 + label_nc + coord_c, self.feat_ch * 4 + label_nc + coord_c, kernel_size=3, padding=1, stride=1),
-            ResidualBlock(self.feat_ch * 4 + label_nc + coord_c, self.feat_ch * 4 + label_nc + coord_c, kernel_size=3, padding=1, stride=1),
-            ResidualBlock(self.feat_ch * 4 + label_nc + coord_c, self.feat_ch * 4 + label_nc + coord_c, kernel_size=3, padding=1, stride=1),
-            ResidualBlock(self.feat_ch * 4 + label_nc + coord_c, self.feat_ch * 4 + label_nc + coord_c, kernel_size=3, padding=1, stride=1))
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1))
 
-        self.phi = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
-        self.theta = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
+        self.phi = nn.Conv2d(in_channels=self.feat_ch * 4 + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
+        self.theta = nn.Conv2d(in_channels=self.feat_ch * 4 + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
 
-        self.phi_w = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
-        self.theta_w = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
+        self.phi_w = nn.Conv2d(in_channels=self.feat_ch * 4 + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
+        self.theta_w = nn.Conv2d(in_channels=self.feat_ch * 4 + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
 
-        self.phi_conf = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
-        self.theta_conf = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
+        self.phi_conf = nn.Conv2d(in_channels=self.feat_ch * 4 + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
+        self.theta_conf = nn.Conv2d(in_channels=self.feat_ch * 4 + coord_c, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0)
         # self.theta_atten = nn.Conv2d(in_channels=self.feat_ch * 4 + label_nc, out_channels=self.cor_dim, kernel_size=1, stride=1, padding=0, bias=False)
 
         # self.upsampling_bi = F.interpolate(scale_factor=self.down, mode='bilinear')
@@ -197,7 +192,7 @@ class NoVGGCorrespondence(BaseNetwork):
         self.zero_tensor = None
         self.relu = nn.ReLU()
 
-    def forward(self, ref_img, real_img, seg_map, ref_seg_map, detach_flag=False):
+    def forward(self, ref_img, real_img, seg_map, detach_flag=False):
         coor_out = {}
         batch_size, _, im_height, im_width = ref_img.shape
         feat_height, feat_width = int(im_height / self.down), int(im_width / self.down)
@@ -217,15 +212,8 @@ class NoVGGCorrespondence(BaseNetwork):
             adp_feat_seg = self.addcoords(adp_feat_seg)
             adp_feat_img = self.addcoords(adp_feat_img)
 
-        seg = F.interpolate(seg_map, size=adp_feat_seg.size()[2:], mode='nearest')
-        ref_seg = F.interpolate(ref_seg_map, size=adp_feat_img.size()[2:], mode='nearest')
-
-        if self.opt.maskmix:
-            cont_features = self.layer(torch.cat((adp_feat_seg, seg), 1))
-            ref_features = self.layer(torch.cat((adp_feat_img, ref_seg), 1))
-        else:
-            cont_features = self.layer(adp_feat_seg)
-            ref_features = self.layer(adp_feat_img)
+        cont_features = self.layer(adp_feat_seg)
+        ref_features = self.layer(adp_feat_img)
 
         dim_mean = 1 if self.opt.PONO_C else -1
 
@@ -258,8 +246,8 @@ class NoVGGCorrespondence(BaseNetwork):
         phi_w = F.softmax(phi_w.view(batch_size, N), dim=-1)
         theta_w_ = theta_w.view(-1, 1, 64, 64).repeat(1, 3, 1, 1)
         phi_w_ = phi_w.view(-1, 1, 64, 64).repeat(1, 3, 1, 1)
-        coor_out['weight1'] = F.interpolate(theta_w_, size=(256, 256))
-        coor_out['weight2'] = F.interpolate(phi_w_, size=(256, 256))
+        coor_out['weight1'] = F.interpolate(theta_w_, size=(256, 256)).detach()
+        coor_out['weight2'] = F.interpolate(phi_w_, size=(256, 256)).detach()
 
 
         # confidence branch
@@ -274,17 +262,8 @@ class NoVGGCorrespondence(BaseNetwork):
         conf_map = (conf_map - conf_map.mean(dim=1, keepdim=True)).view(batch_size, 1, feat_height, feat_width)
         conf_map = torch.sigmoid(conf_map*10.0)
 
-        # print(theta_w.min(), theta_w.max())
-        # print(phi_w.min(), phi_w.max())
-        # print (conf_map.min(), conf_map.max())
-        # print (1/0)
-
-        # phi_w = F.softmax(phi_w.view(batch_size, N) * 25.0, dim=-1)
         conf_map_ = conf_map.view(-1, 1, 64, 64).repeat(1, 3, 1, 1)
-        # conf_map_ = conf_map_.view(-1, 1, 64, 64).repeat(1, 3, 1, 1)
         coor_out['conf_map'] = F.interpolate(conf_map_, size=(256, 256))
-
-
 
         # OT matching branch
         F_, G_ = self.uot(theta_w, theta_permute, phi_w, phi_permute)
@@ -294,11 +273,6 @@ class NoVGGCorrespondence(BaseNetwork):
         eps = self.blur ** self.p
         f = ((F_i + G_j - C_ij) / eps).exp() * (a_i * b_j)
         f_div_C = f / f.sum(-1).view(-1, N, 1)
-        # f_div_C = F.softmax(f, dim=-1)
-        # f = ((F_i + G_j - C_ij) / eps) * (a_i * b_j)
-        # f_div_C = F.softmax(f*10000000, dim=-1)
-
-
 
         # feature transport branch
         ref_ = F.interpolate(ref_img, size=(64, 64), mode='nearest')
@@ -309,7 +283,7 @@ class NoVGGCorrespondence(BaseNetwork):
 
         y_ = y1.permute(0, 2, 1).contiguous()
         y_ = y_.view(batch_size, channel_, feat_height, feat_width)  # 2*3*44*44
-        coor_out['warp_tmp'] = y_ if self.opt.warp_patch else self.upsampling(y_)
+        coor_out['warp_tmp'] = self.upsampling(y_)
 
         ref_feat2 = F.interpolate(ref_feat2, size=(64, 64), mode='nearest')
         channel2 = ref_feat2.shape[1]
@@ -339,59 +313,15 @@ class NoVGGCorrespondence(BaseNetwork):
 
         coor_out['warp_out'] = [seg_map, seg_feat2, seg_feat3, seg_feat4, seg_feat5, y1, y2, y3, y4, y5, conf_map]
 
-        if self.opt.warp_mask_losstype == 'direct' or self.opt.show_warpmask:
-            ref_seg = F.interpolate(ref_seg_map, scale_factor= 1/self.down, mode='nearest')
-            channel = ref_seg.shape[1]
-            ref_seg = ref_seg.view(batch_size, channel, -1)
-            ref_seg = ref_seg.permute(0, 2, 1)
-            warp_mask = torch.matmul(f_div_C, ref_seg)  # 2*1936*channel
-            warp_mask = warp_mask.permute(0, 2, 1).contiguous()
-            coor_out['warp_mask'] = warp_mask.view(batch_size, channel, feat_height, feat_width)  # 2*3*44*44
-        elif self.opt.warp_mask_losstype == 'cycle':
-            # f_div_C_v = F.softmax(f_WTA.transpose(1, 2), dim=-1)
+        if self.opt.warp_cycle_w > 0:
             f_WTA_v = f.transpose(1, 2)
             f_div_C_v = f_WTA_v / f_WTA_v.sum(-1).view(-1, N, 1)
 
-            seg = F.interpolate(seg_map, scale_factor=1 / self.down, mode='nearest')
-            channel = seg.shape[1]
-            seg = seg.view(batch_size, channel, -1)
-            seg = seg.permute(0, 2, 1)
-            warp_mask_to_ref = torch.matmul(f_div_C_v, seg)  # 2*1936*channel
-            warp_mask = torch.matmul(f_div_C, warp_mask_to_ref)  # 2*1936*channel
-            warp_mask = warp_mask.permute(0, 2, 1).contiguous()
-            coor_out['warp_mask'] = warp_mask.view(batch_size, channel, feat_height, feat_width)  # 2*3*44*44
-        else:
-            warp_mask = None
+            channel = y_.shape[1]
+            y_ = y_.view(batch_size, channel, -1).permute(0, 2, 1)
+            warp_cycle = torch.matmul(f_div_C_v, y_).permute(0, 2, 1).contiguous()
 
-        if self.opt.warp_cycle_w > 0:
-            if self.opt.correspondence == 'ot':
-                f_WTA_v = f.transpose(1, 2)
-                f_div_C_v = f_WTA_v / f_WTA_v.sum(-1).view(-1, N, 1)
-            else:
-                f_div_C_v = F.softmax(f.transpose(1, 2), dim=-1)
-
-
-            if self.opt.warp_patch:
-                y_ = F.unfold(y_, self.down, stride=self.down)
-                warp_cycle = torch.matmul(f_div_C_v, y_)
-                warp_cycle = warp_cycle.permute(0, 2, 1)
-                warp_cycle = F.fold(warp_cycle, 256, self.down, stride=self.down)
-                coor_out['warp_cycle'] = warp_cycle
-            else:
-                channel = y_.shape[1]
-                y_ = y_.view(batch_size, channel, -1).permute(0, 2, 1)
-                warp_cycle = torch.matmul(f_div_C_v, y_).permute(0, 2, 1).contiguous()
-
-                coor_out['warp_cycle'] = warp_cycle.view(batch_size, channel, feat_height, feat_width)
-                if self.opt.two_cycle:
-                    real_img = F.avg_pool2d(real_img, self.down)
-                    real_img = real_img.view(batch_size, channel, -1)
-                    real_img = real_img.permute(0, 2, 1)
-                    warp_i2r = torch.matmul(f_div_C_v, real_img).permute(0, 2, 1).contiguous()  #warp input to ref
-                    warp_i2r = warp_i2r.view(batch_size, channel, feat_height, feat_width)
-                    warp_i2r2i = torch.matmul(f_div_C, warp_i2r.view(batch_size, channel, -1).permute(0, 2, 1))
-                    coor_out['warp_i2r'] = warp_i2r
-                    coor_out['warp_i2r2i'] = warp_i2r2i.permute(0, 2, 1).contiguous().view(batch_size, channel, feat_height, feat_width)
+            coor_out['warp_cycle'] = warp_cycle.view(batch_size, channel, feat_height, feat_width)
 
         return coor_out
 

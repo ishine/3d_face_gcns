@@ -23,17 +23,12 @@ class SEACEResnetBlock(nn.Module):
         self.learned_shortcut = (fin != fout)
         fmiddle = min(fin, fout)
         self.opt = opt
-        # self.pad_type = 'nozero'
-        # self.use_se = use_se
 
         # create conv layers
-        # if self.pad_type != 'zero':
         self.pad = nn.ReflectionPad2d(dilation)
         self.conv_0 = nn.Conv2d(fin, fmiddle, kernel_size=3, padding=0, dilation=dilation)
         self.conv_1 = nn.Conv2d(fmiddle, fout, kernel_size=3, padding=0, dilation=dilation)
-        # else:
-        #     self.conv_0 = nn.Conv2d(fin, fmiddle, kernel_size=3, padding=dilation, dilation=dilation)
-        #     self.conv_1 = nn.Conv2d(fmiddle, fout, kernel_size=3, padding=dilation, dilation=dilation)
+        
         if self.learned_shortcut:
             self.conv_s = nn.Conv2d(fin, fout, kernel_size=1, bias=False)
 
@@ -58,10 +53,8 @@ class SEACEResnetBlock(nn.Module):
         self.norm_1 = SEACE(seace_config_str, fmiddle, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc, atten=atten)
         if self.learned_shortcut:
             self.norm_s = SEACE(seace_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc, atten=atten)
-        if use_se:
-            self.se_layar = SELayer(fout)
 
-    # note the resnet block with SPADE also takes in |seg|,
+    # note the resnet block with SEACE also takes in |seg|,
     # the semantic segmentation map as input
     def forward(self, x, seg1, feat, atten_map, conf_map):
         x_s = self.shortcut(x, seg1, feat, atten_map, conf_map)
@@ -81,7 +74,7 @@ class SEACEResnetBlock(nn.Module):
         return F.leaky_relu(x, 2e-1)
 
 class Ada_SPADEResnetBlock(nn.Module):
-    def __init__(self, fin, fout, opt, use_se=False, dilation=1):
+    def __init__(self, fin, fout, opt, in_channels, use_se=False, dilation=1):
         super().__init__()
         # Attributes
         self.learned_shortcut = (fin != fout)
@@ -116,15 +109,11 @@ class Ada_SPADEResnetBlock(nn.Module):
 
         # define normalization layers
         spade_config_str = opt.norm_G.replace('spectral', '')
-        if 'spade_ic' in opt:
-            ic = opt.spade_ic
-        else:
-            ic = 0 + (3 if 'warp' in opt.CBN_intype else 0) + (opt.semantic_nc if 'mask' in opt.CBN_intype else 0)
 
-        self.norm_0 = SPADE(spade_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex)
-        self.norm_1 = SPADE(spade_config_str, fmiddle, ic, PONO=opt.PONO, use_apex=opt.apex)
+        self.norm_0 = SPADE(spade_config_str, fin, in_channels, PONO=opt.PONO, use_apex=opt.apex)
+        self.norm_1 = SPADE(spade_config_str, fmiddle, in_channels, PONO=opt.PONO, use_apex=opt.apex)
         if self.learned_shortcut:
-            self.norm_s = SPADE(spade_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex)
+            self.norm_s = SPADE(spade_config_str, fin, in_channels, PONO=opt.PONO, use_apex=opt.apex)
 
         if use_se:
             self.se_layar = SELayer(fout)

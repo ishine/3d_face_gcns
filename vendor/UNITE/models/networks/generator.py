@@ -27,7 +27,6 @@ class SEACEGenerator(BaseNetwork):
         nf = 64
         self.sw, self.sh = self.compute_latent_vector_size(opt)
 
-        ic = opt.semantic_nc
         self.fc = nn.Conv2d(16 * nf, 16 * nf, 3, stride=1, padding=1)
         self.G_head_0 = SEACEResnetBlock(16 * nf, 16 * nf, opt, feat_nc=512, atten=False)
 
@@ -58,7 +57,7 @@ class SEACEGenerator(BaseNetwork):
 
         seg_feat1, seg_feat2, seg_feat3, seg_feat4, seg_feat5, \
         ref_feat1, ref_feat2, ref_feat3, ref_feat4, ref_feat5, conf_map = warp_out
-        #  3, 128, 256, 512, 512
+        #  21, 128, 256, 512, 512
 
         atten2 = self.attn2(seg_feat2, size=64)
         atten3 = self.attn3(seg_feat3, size=32)
@@ -131,7 +130,7 @@ class AdaptiveFeatureGenerator(BaseNetwork):
                             help="If 'more', adds upsampling layer between the two middle resnet blocks")
         return parser
 
-    def __init__(self, opt):
+    def __init__(self, opt, in_channels):
         # TODO: kernel=4, concat noise, or change architecture to vgg feature pyramid
         super().__init__()
         self.opt = opt
@@ -140,7 +139,7 @@ class AdaptiveFeatureGenerator(BaseNetwork):
         ndf = 64
         nf = 64
         norm_layer = get_nonspade_norm_layer(opt, opt.norm_E)
-        self.layer1 = norm_layer(nn.Conv2d(opt.spade_ic, ndf, kw, stride=1, padding=pw))
+        self.layer1 = norm_layer(nn.Conv2d(in_channels, ndf, kw, stride=1, padding=pw))
         self.layer2 = norm_layer(nn.Conv2d(ndf * 1, ndf * 2, opt.adaptor_kernel, stride=2, padding=pw))
         self.layer3 = norm_layer(nn.Conv2d(ndf * 2, ndf * 4, kw, stride=1, padding=pw))
         self.layer4 = norm_layer(nn.Conv2d(ndf * 4, ndf * 8, opt.adaptor_kernel, stride=2, padding=pw))
@@ -148,24 +147,24 @@ class AdaptiveFeatureGenerator(BaseNetwork):
 
         self.actvn = nn.LeakyReLU(0.2, False)
         self.opt = opt
-        self.head_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, use_se=opt.adaptor_se)
+        self.head_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
 
-        # self.head_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, use_se=opt.adaptor_se)
+        # self.head_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
         if opt.adaptor_nonlocal:
             self.attn = Attention(8 * nf, False)
-        self.G_middle_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, use_se=opt.adaptor_se)
-        self.G_middle_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, use_se=opt.adaptor_se)
+        self.G_middle_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
+        self.G_middle_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
 
         # if opt.adaptor_res_deeper:
-        # self.deeper0 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt)
+        # self.deeper0 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels)
             # if opt.dilation_conv:
-        # self.deeper1 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, dilation=2)
-        self.deeper2 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, dilation=4)
+        # self.deeper1 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels, dilation=2)
+        self.deeper2 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels, dilation=4)
         self.degridding0 = norm_layer(nn.Conv2d(ndf * 4, ndf * 4, 3, stride=1, padding=2, dilation=2))
         # self.degridding1 = norm_layer(nn.Conv2d(ndf * 4, ndf * 4, 3, stride=1, padding=1))
             # else:
-            #     self.deeper1 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt)
-            #     self.deeper2 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt)
+            #     self.deeper1 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt, in_channels)
+            #     self.deeper2 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt, in_channels)
 
     def forward(self, input, seg, multi=False):
         x = self.layer1(input)
