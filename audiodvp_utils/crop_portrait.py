@@ -164,11 +164,13 @@ def normalize_and_crop_lip_region(data_dir):
         preds = fa_3d.get_landmarks(output)
         lip_landmark = preds[0][:, :2][48:].astype(int)
         (x, y, w, h) = cv2.boundingRect(lip_landmark)
-        resized_roi = np.zeros((256, 256, 3), dtype=int)
+        resized_roi = np.zeros((256,256,3))
         roi = output[y:y + h, x:x + w]
-        resized_roi[:h, :w, :] = roi
+        roi = imutils.resize(roi, width=256, inter=cv2.INTER_CUBIC)
         
-        cv2.imwrite(os.path.join(data_dir, 'crop_lip', os.path.basename(image_list[i])), resized_roi)
+        # h, w, _ = roi.shape
+        # resized_roi[:h, :, :] = roi
+        cv2.imwrite(os.path.join(data_dir, 'crop_lip', os.path.basename(image_list[i])), roi)
 
 
 if __name__ == '__main__':

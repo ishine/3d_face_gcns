@@ -87,7 +87,6 @@ python3 vendor/UNITE/train.py \
     --Nw 7 \
     --preprocess none \
     --num_threads 4 \
-	--display_freq 1000 \
 	--niter 150 \
 	--niter_decay 150 \
 	--use_attention \

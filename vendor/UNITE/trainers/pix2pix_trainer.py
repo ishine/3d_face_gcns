@@ -70,7 +70,7 @@ class Pix2PixTrainer():
         return {**self.g_losses, **self.d_losses}
 
     def get_latest_generated(self):
-        return self.out['fake_image']
+        return self.out['fake_image'].detach()
 
     def save(self, epoch):
         self.pix2pix_model_on_one_gpu.save(epoch)

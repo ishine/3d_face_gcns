@@ -143,28 +143,19 @@ class AdaptiveFeatureGenerator(BaseNetwork):
         self.layer2 = norm_layer(nn.Conv2d(ndf * 1, ndf * 2, opt.adaptor_kernel, stride=2, padding=pw))
         self.layer3 = norm_layer(nn.Conv2d(ndf * 2, ndf * 4, kw, stride=1, padding=pw))
         self.layer4 = norm_layer(nn.Conv2d(ndf * 4, ndf * 8, opt.adaptor_kernel, stride=2, padding=pw))
-        self.layer5 = norm_layer(nn.Conv2d(ndf * 8, ndf * 8, kw, stride=1, padding=pw))
+        # self.layer5 = norm_layer(nn.Conv2d(ndf * 8, ndf * 8, kw, stride=1, padding=pw))
 
         self.actvn = nn.LeakyReLU(0.2, False)
         self.opt = opt
         self.head_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
 
-        # self.head_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
         if opt.adaptor_nonlocal:
             self.attn = Attention(8 * nf, False)
         self.G_middle_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
         self.G_middle_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
 
-        # if opt.adaptor_res_deeper:
-        # self.deeper0 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels)
-            # if opt.dilation_conv:
-        # self.deeper1 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels, dilation=2)
         self.deeper2 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels, dilation=4)
         self.degridding0 = norm_layer(nn.Conv2d(ndf * 4, ndf * 4, 3, stride=1, padding=2, dilation=2))
-        # self.degridding1 = norm_layer(nn.Conv2d(ndf * 4, ndf * 4, 3, stride=1, padding=1))
-            # else:
-            #     self.deeper1 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt, in_channels)
-            #     self.deeper2 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt, in_channels)
 
     def forward(self, input, seg, multi=False):
         x = self.layer1(input)
@@ -175,22 +166,18 @@ class AdaptiveFeatureGenerator(BaseNetwork):
         x3 = x
 
         x = self.layer4(self.actvn(x))
-        x = self.layer5(self.actvn(x))
+        # x = self.layer5(self.actvn(x))
         x = self.head_0(x, seg)
         x4 = x
 
-        # x = self.head_1(x, seg)
         if self.opt.adaptor_nonlocal:
             x = self.attn(x)
         x = self.G_middle_0(x, seg)
         x = self.G_middle_1(x, seg)
         x5 = x
 
-        # x = self.deeper0(x, seg)
-        # x = self.deeper1(x, seg)
         x = self.deeper2(x, seg)
         x = self.degridding0(x)
-        # x = self.degridding1(x)
 
         if multi == True:
             return x2, x3, x4, x5, x

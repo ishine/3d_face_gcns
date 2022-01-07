@@ -185,13 +185,10 @@ class Pix2PixModel(torch.nn.Module):
         for i in range(len(generate_out['real_features'])):
             loss += weights[i] * F.l1_loss(fake_features[i], generate_out['real_features'][i].detach())
         G_losses['fm'] = loss * self.opt.lambda_vgg * self.opt.fm_ratio
-        
-        feat_loss = util.mse_loss(fake_features[self.perceptual_layer], generate_out['real_features'][self.perceptual_layer].detach())
-        G_losses['perc'] = feat_loss * self.opt.weight_perceptual
 
         G_losses['contextual'] = self.get_ctx_loss(fake_features, generate_out['ref_features']) * self.opt.lambda_vgg * self.opt.ctx_w
 
-        G_losses['L1'] = F.l1_loss(generate_out['fake_image'], real_image)
+        G_losses['L1'] = F.l1_loss(generate_out['fake_image'], real_image) * self.opt.lambda_L1
         
         return G_losses, generate_out
 
@@ -209,11 +206,6 @@ class Pix2PixModel(torch.nn.Module):
                                             for_discriminator=True) * self.opt.weight_gan
 
         return D_losses
-
-    def encode_z(self, real_image):
-        mu, logvar = self.net['netE'](real_image)
-        z = self.reparameterize(mu, logvar)
-        return z, mu, logvar
 
     def generate_fake(self, input_semantics, real_image, ref_image):
         generate_out = {}
@@ -269,19 +261,6 @@ class Pix2PixModel(torch.nn.Module):
             real = pred[pred.size(0) // 2:]
 
         return fake, real
-
-    def get_edges(self, t):
-        edge = self.ByteTensor(t.size()).zero_()
-        edge[:, :, :, 1:] = edge[:, :, :, 1:] | (t[:, :, :, 1:] != t[:, :, :, :-1])
-        edge[:, :, :, :-1] = edge[:, :, :, :-1] | (t[:, :, :, 1:] != t[:, :, :, :-1])
-        edge[:, :, 1:, :] = edge[:, :, 1:, :] | (t[:, :, 1:, :] != t[:, :, :-1, :])
-        edge[:, :, :-1, :] = edge[:, :, :-1, :] | (t[:, :, 1:, :] != t[:, :, :-1, :])
-        return edge.float()
-
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return eps.mul(std) + mu
 
     def use_gpu(self):
         return len(self.opt.gpu_ids) > 0

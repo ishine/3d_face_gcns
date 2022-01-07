@@ -168,7 +168,13 @@ class NoVGGCorrespondence(BaseNetwork):
         self.cor_dim = 256
         coord_c = 3 if opt.use_coordconv else 0
 
-        self.layer = nn.Sequential(
+        self.layer_ref = nn.Sequential(
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
+            ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1))
+        
+        self.layer_cont = nn.Sequential(
             ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
             ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
             ResidualBlock(self.feat_ch * 4 + coord_c, self.feat_ch * 4 + coord_c, kernel_size=3, padding=1, stride=1),
@@ -203,17 +209,17 @@ class NoVGGCorrespondence(BaseNetwork):
         adp_feat_seg = util.feature_normalize(seg_feat6)
         adp_feat_img = util.feature_normalize(ref_feat6)
 
-        if self.opt.isTrain and self.opt.novgg_featpair > 0:
-            adaptive_feature_img_pair = self.adaptive_model_img(real_img, real_img)
-            adaptive_feature_img_pair = util.feature_normalize(adaptive_feature_img_pair)
-            coor_out['loss_novgg_featpair'] = F.l1_loss(adp_feat_seg, adaptive_feature_img_pair) * self.opt.novgg_featpair
+        # if self.opt.isTrain and self.opt.novgg_featpair > 0:
+        #     adaptive_feature_img_pair = self.adaptive_model_img(real_img, real_img)
+        #     adaptive_feature_img_pair = util.feature_normalize(adaptive_feature_img_pair)
+        #     coor_out['loss_novgg_featpair'] = F.l1_loss(adp_feat_seg, adaptive_feature_img_pair) * self.opt.novgg_featpair
 
         if self.opt.use_coordconv:
             adp_feat_seg = self.addcoords(adp_feat_seg)
             adp_feat_img = self.addcoords(adp_feat_img)
 
-        cont_features = self.layer(adp_feat_seg)
-        ref_features = self.layer(adp_feat_img)
+        cont_features = self.layer_cont(adp_feat_seg)
+        ref_features = self.layer_ref(adp_feat_img)
 
         dim_mean = 1 if self.opt.PONO_C else -1
 

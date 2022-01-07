@@ -16,6 +16,7 @@ from util.util import print_current_errors
 from trainers.pix2pix_trainer import Pix2PixTrainer
 import torch.nn.functional as F
 
+print(torch.cuda.is_available())
 # parse options
 opt = TrainOptions().parse()
 
@@ -62,7 +63,7 @@ for epoch in iter_counter.training_epochs():
             label = data_i['label'][:, 9:12, :, :]
 
             imgs = torch.cat((label.cpu(), trainer.out['weight1'].cpu()*255, trainer.out['weight2'].cpu()*255,
-                                data_i['ref'].cpu(), trainer.out['warp_tmp'].cpu(),
+                                data_i['ref'].cpu(), trainer.out['warp_tmp'].detach().cpu(), data_i['lip_image'].cpu(),
                                 trainer.get_latest_generated().data.cpu(), data_i['image'].cpu()), 0)
             
             vutils.save_image(imgs, im_sv_path + '/' + str(epoch) + '_' + str(iter_counter.total_steps_so_far) + '.png',
