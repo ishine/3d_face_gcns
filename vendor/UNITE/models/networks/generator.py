@@ -14,6 +14,100 @@ from models.networks.architecture import SEACEResnetBlock as SEACEResnetBlock
 from models.networks.architecture import Ada_SPADEResnetBlock as Ada_SPADEResnetBlock
 from models.networks.architecture import Attention
 from models.networks.sync_batchnorm import SynchronizedBatchNorm2d, SynchronizedBatchNorm1d
+import util.util as util
+
+class ResidualBlock(nn.Module):
+    
+    def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, stride=1):
+        super(ResidualBlock, self).__init__()
+        self.padding1 = nn.ReflectionPad2d(padding)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
+        self.bn1 = nn.InstanceNorm2d(out_channels)
+        self.prelu = nn.PReLU()
+        self.padding2 = nn.ReflectionPad2d(padding)
+        self.conv2 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
+        self.bn2 = nn.InstanceNorm2d(out_channels)
+
+    def forward(self, x):
+        residual = x
+        out = self.padding1(x)
+        out = self.conv1(out)
+        out = self.bn1(out)
+        out = self.prelu(out)
+        out = self.padding2(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += residual
+        out = self.prelu(out)
+        return out
+
+
+class NoCorrGenerator(BaseNetwork):
+    @staticmethod
+    def modify_commandline_options(parser, is_train):
+        parser.set_defaults(norm_G='spectralspadesyncbatch3x3')
+        return parser
+    
+    def __init__(self, opt):
+        super().__init__()
+        self.opt = opt
+
+        self.adaptive_model_seg = AdaptiveFeatureGenerator(opt, opt.semantic_nc)
+        self.adaptive_model_img = AdaptiveFeatureGenerator(opt, opt.ref_nc)
+        
+        nf = 64
+        self.sw, self.sh = self.compute_latent_vector_size(opt)
+
+        self.fc = nn.Conv2d(16 * nf, 8 * nf, 3, stride=1, padding=1)
+        self.G_head_0 = SEACEResnetBlock(8 * nf, 8 * nf, opt, feat_nc=512)
+
+        self.G_middle_0 = SEACEResnetBlock(8 * nf, 4 * nf, opt, feat_nc=256)
+        self.G_middle_1 = SEACEResnetBlock(4 * nf, 4 * nf, opt, feat_nc=256)
+
+        self.G_up_0 = SEACEResnetBlock(4 * nf, 4 * nf, opt, feat_nc=256)
+        self.G_up_1 = SEACEResnetBlock(4 * nf, 2 * nf, opt, feat_nc=128)
+        self.attn = Attention(2 * nf, 'spectral' in opt.norm_G)
+
+        self.G_out_0 = SEACEResnetBlock(2 * nf, 2 * nf, opt, feat_nc=128)
+        self.G_out_1 = SEACEResnetBlock(2 * nf, 1 * nf, opt, feat_nc=3)
+
+        self.conv_img1 = nn.Conv2d(1 * nf, 3, 3, padding=1)
+        self.up = nn.Upsample(scale_factor=2)
+
+    def compute_latent_vector_size(self, opt):
+        num_up_layers = 5
+        sw = opt.crop_size // (2**num_up_layers)
+        sh = round(sw / opt.aspect_ratio)
+        return sw, sh
+
+    def forward(self, ref_img, seg_map):
+        seg_feat2, seg_feat3, seg_feat4, seg_feat5, seg_feat6 = self.adaptive_model_seg(seg_map, seg_map, multi=True)   # (64x256x256), (128x128x128), (128x64x64), (256x32x32), (256x16x16), (512x8x8)
+        ref_feat2, ref_feat3, ref_feat4, ref_feat5, ref_feat6 = self.adaptive_model_img(ref_img, ref_img, multi=True)   
+
+        x = torch.cat((seg_feat6, ref_feat6), 1)
+        x = F.interpolate(x, size=(self.sh, self.sw))
+        x = self.fc(x)      # 512 x 8 x 8
+        x = self.G_head_0(x, seg_feat6, ref_feat6)  # 512 x 8 x 8
+        x = self.up(x)      # 512 x 16 x 16
+        x = self.G_middle_0(x, seg_feat5, ref_feat5)    # 256 x 16 x 16
+        x = self.G_middle_1(x, seg_feat5, ref_feat5)    # 256 x 16 x 16
+        x = self.up(x)  # 256 x 32 x 32
+
+        x = self.G_up_0(x, seg_feat4, ref_feat4) # 256 x 32 x 32
+        x = self.up(x)  # 256 x 64 x 64
+        x = self.G_up_1(x, seg_feat3, ref_feat3)    # 128 x 64 x 64
+        x = self.up(x)  # 128 x 128 x 128
+
+        x = self.attn(x)
+        x = self.G_out_0(x, seg_feat2, ref_feat2)   # 128 x 128 x 128
+        x = self.up(x)  # 128 x 256 x 256
+        x = self.G_out_1(x, seg_map, ref_img)   # 64 x 256 x 256
+
+        x = self.conv_img1(F.leaky_relu(x, 2e-1))   # 3 x 256 x 256
+        x = torch.tanh(x)
+
+        return x
+
 
 class SEACEGenerator(BaseNetwork):
     @staticmethod
@@ -140,22 +234,20 @@ class AdaptiveFeatureGenerator(BaseNetwork):
         nf = 64
         norm_layer = get_nonspade_norm_layer(opt, opt.norm_E)
         self.layer1 = norm_layer(nn.Conv2d(in_channels, ndf, kw, stride=1, padding=pw))
-        self.layer2 = norm_layer(nn.Conv2d(ndf * 1, ndf * 2, opt.adaptor_kernel, stride=2, padding=pw))
-        self.layer3 = norm_layer(nn.Conv2d(ndf * 2, ndf * 4, kw, stride=1, padding=pw))
-        self.layer4 = norm_layer(nn.Conv2d(ndf * 4, ndf * 8, opt.adaptor_kernel, stride=2, padding=pw))
-        # self.layer5 = norm_layer(nn.Conv2d(ndf * 8, ndf * 8, kw, stride=1, padding=pw))
+        self.layer2 = norm_layer(nn.Conv2d(ndf * 1, ndf * 2, kw, stride=2, padding=pw))
+        self.layer3 = norm_layer(nn.Conv2d(ndf * 2, ndf * 2, kw, stride=2, padding=pw))
+        self.layer4 = norm_layer(nn.Conv2d(ndf * 2, ndf * 4, kw, stride=2, padding=pw))
+        self.layer5 = norm_layer(nn.Conv2d(ndf * 4, ndf * 4, kw, stride=2, padding=pw))
+        self.layer6 = norm_layer(nn.Conv2d(ndf * 4, ndf * 8, kw, stride=2, padding=pw))
 
-        self.actvn = nn.LeakyReLU(0.2, False)
+        self.actvn = nn.LeakyReLU(0.2, True)
         self.opt = opt
-        self.head_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
+        self.head_0 = Ada_SPADEResnetBlock(4 * nf, 4 * nf, opt, in_channels, use_se=opt.adaptor_se)
 
         if opt.adaptor_nonlocal:
-            self.attn = Attention(8 * nf, False)
+            self.attn = Attention(4 * nf, False)
         self.G_middle_0 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
-        self.G_middle_1 = Ada_SPADEResnetBlock(8 * nf, 8 * nf, opt, in_channels, use_se=opt.adaptor_se)
-
-        self.deeper2 = Ada_SPADEResnetBlock(8 * nf, 4 * nf, opt, in_channels, dilation=4)
-        self.degridding0 = norm_layer(nn.Conv2d(ndf * 4, ndf * 4, 3, stride=1, padding=2, dilation=2))
+        
 
     def forward(self, input, seg, multi=False):
         x = self.layer1(input)
@@ -166,21 +258,20 @@ class AdaptiveFeatureGenerator(BaseNetwork):
         x3 = x
 
         x = self.layer4(self.actvn(x))
-        # x = self.layer5(self.actvn(x))
-        x = self.head_0(x, seg)
         x4 = x
+        x = self.layer5(self.actvn(x))
+        x = self.head_0(x, seg)
+        x5 = x
 
         if self.opt.adaptor_nonlocal:
             x = self.attn(x)
+        
+        x = self.layer6(self.actvn(x))
         x = self.G_middle_0(x, seg)
-        x = self.G_middle_1(x, seg)
-        x5 = x
-
-        x = self.deeper2(x, seg)
-        x = self.degridding0(x)
+        x6 = x
 
         if multi == True:
-            return x2, x3, x4, x5, x
+            return x2, x3, x4, x5, x6
         else:
             return x
 

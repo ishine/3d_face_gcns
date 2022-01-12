@@ -24,14 +24,14 @@ def PositionalNorm2d(x, epsilon=1e-5):
     return output
 
 class SEACE(nn.Module):
-    def __init__(self, config_text, norm_nc, label_nc, PONO=False, use_apex=False, feat_nc=None, atten=False):
+    def __init__(self, config_text, norm_nc, label_nc, PONO=False, use_apex=False, feat_nc=None):
         super().__init__()
 
         assert config_text.startswith('spade')
         parsed = re.search('spade(\D+)(\d)x\d', config_text)
         param_free_norm_type = str(parsed.group(1))
         ks = int(parsed.group(2))
-        self.norm_nc, self.atten = norm_nc, atten
+        self.norm_nc = norm_nc
 
         if PONO:
             self.param_free_norm = PositionalNorm2d
@@ -59,52 +59,26 @@ class SEACE(nn.Module):
         self.beta = nn.Conv2d(nhidden, norm_nc, kernel_size=ks, padding=pw)
 
         self.ref_shared = nn.Sequential(
-            nn.Conv2d(feat_nc, feat_nc, kernel_size=ks, padding=pw), nn.ReLU())
-        self.ref_shared2 = nn.Sequential(
             nn.Conv2d(feat_nc, nhidden, kernel_size=ks, padding=pw), nn.ReLU())
-        # self.ref_gamma = nn.Conv2d(nhidden, norm_nc, kernel_size=ks, padding=pw)
-        # self.ref_beta = nn.Conv2d(nhidden, norm_nc, kernel_size=ks, padding=pw)
-        self.coef = nn.Parameter(torch.tensor(0.), requires_grad=True)
+        self.ref_gamma = nn.Conv2d(nhidden, nhidden, kernel_size=ks, padding=pw)
+        self.ref_beta = nn.Conv2d(nhidden, nhidden, kernel_size=ks, padding=pw)
 
-    def forward(self, x, seg_map, ref_map, atten_map, conf_map):
+    def forward(self, x, seg_map, ref_map):
         normalized = self.param_free_norm(x)
         b, _, h, w = x.size()
 
-        seg_map = F.interpolate(seg_map, size=(h, w), mode='nearest')
-        ref_map = F.interpolate(ref_map, size=(h, w), mode='nearest')
-        conf_map = F.interpolate(conf_map, size=(h, w), mode='nearest')
-
-        conf_map = conf_map.repeat(1, self.nhidden, 1, 1)
-
-
         seg_feat = self.seg_shared(seg_map)
-        if self.atten:
-            if h <= 64:
-                ref_feat = self.ref_shared(ref_map)
-                # print (atten_map.shape, ref_feat.shape)
-                ref_aggr = torch.bmm(ref_feat.view(b, self.feat_nc, h*w), atten_map.permute(0, 2, 1))
-                ref_aggr = ref_aggr.view(b, self.feat_nc, h, w)
-            else:
-                ref_map_aggr = F.interpolate(ref_map, size=(64, 64), mode='nearest')
-                ref_feat = self.ref_shared(ref_map_aggr)
+        
+        ref_feat = self.ref_shared(ref_map)
+        ref_gamma = self.ref_gamma(ref_feat)
+        ref_beta = self.ref_beta(ref_feat)
 
-                ref_aggr = torch.bmm(ref_feat.view(b, self.feat_nc, 64 * 64), atten_map.permute(0, 2, 1))
-                ref_aggr = ref_aggr.view(b, self.feat_nc, 64, 64)
-                ref_aggr = F.interpolate(ref_aggr, size=(h, w), mode='nearest')
-            ref_map = self.coef * ref_aggr + ref_map
-        ref_feat = self.ref_shared2(ref_map)
-        # ref_feat = F.interpolate(ref_feat, size=(h, w), mode='nearest')
-        # print (conf_map.shape, seg_feat.shape, ref_feat.shape)
-        feat = seg_feat * (1 - conf_map) + ref_feat * conf_map
-        feat = F.interpolate(feat, size=(h, w), mode='nearest')
+        feat = seg_feat * (1 + ref_gamma) + ref_beta
         gamma = self.gamma(feat)
         beta = self.beta(feat)
-
         out = normalized * (1 + gamma) + beta
 
         return out
-
-
 
 
 

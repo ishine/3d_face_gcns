@@ -17,7 +17,7 @@ from models.networks.normalization import SPADE, equal_lr, SEACE
 # class-conditional GAN architecture using residual block.
 # The code was inspired from https://github.com/LMescheder/GAN_stability.
 class SEACEResnetBlock(nn.Module):
-    def __init__(self, fin, fout, opt, use_se=False, dilation=1, feat_nc=None, atten=False, conf_map=None):
+    def __init__(self, fin, fout, opt, use_se=False, dilation=1, feat_nc=None):
         super().__init__()
         # Attributes
         self.learned_shortcut = (fin != fout)
@@ -49,23 +49,23 @@ class SEACEResnetBlock(nn.Module):
         seace_config_str = opt.norm_G.replace('spectral', '')
         ic = opt.semantic_nc
 
-        self.norm_0 = SEACE(seace_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc, atten=atten)
-        self.norm_1 = SEACE(seace_config_str, fmiddle, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc, atten=atten)
+        self.norm_0 = SEACE(seace_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc)
+        self.norm_1 = SEACE(seace_config_str, fmiddle, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc)
         if self.learned_shortcut:
-            self.norm_s = SEACE(seace_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc, atten=atten)
+            self.norm_s = SEACE(seace_config_str, fin, ic, PONO=opt.PONO, use_apex=opt.apex, feat_nc=feat_nc)
 
     # note the resnet block with SEACE also takes in |seg|,
     # the semantic segmentation map as input
-    def forward(self, x, seg1, feat, atten_map, conf_map):
-        x_s = self.shortcut(x, seg1, feat, atten_map, conf_map)
-        dx = self.conv_0(self.pad(self.actvn(self.norm_0(x, seg1, feat, atten_map, conf_map))))
-        dx = self.conv_1(self.pad(self.actvn(self.norm_1(dx, seg1, feat, atten_map, conf_map))))
+    def forward(self, x, seg1, feat):
+        x_s = self.shortcut(x, seg1, feat)
+        dx = self.conv_0(self.pad(self.actvn(self.norm_0(x, seg1, feat))))
+        dx = self.conv_1(self.pad(self.actvn(self.norm_1(dx, seg1, feat))))
         out = x_s + dx
         return out
 
-    def shortcut(self, x, seg1, feat, atten_map, conf_map):
+    def shortcut(self, x, seg1, feat):
         if self.learned_shortcut:
-            x_s = self.conv_s(self.norm_s(x, seg1, feat, atten_map, conf_map))
+            x_s = self.conv_s(self.norm_s(x, seg1, feat))
         else:
             x_s = x
         return x_s

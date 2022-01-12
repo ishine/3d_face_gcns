@@ -46,34 +46,27 @@ class Pix2PixModel(torch.nn.Module):
     # routines based on |mode|.
     def forward(self, data, mode, GforD=None):
 
-        real_image, input_semantics, ref_image, lip_image = self.preprocess_input(data.copy())
-
         generated_out = {}
         if mode == 'generator':
-            g_loss, generated_out = self.compute_generator_loss(input_semantics, real_image, ref_image, lip_image)
+            real_image, input_semantics, ref_image = self.preprocess_input(data.copy(), mode=mode)
+            g_loss, generated_out = self.compute_generator_loss(input_semantics, real_image, ref_image)
             
             out = {}
             out['fake_image'] = generated_out['fake_image']
             out['input_semantics'] = input_semantics
-            out['warp_out'] = None if 'warp_out' not in generated_out else generated_out['warp_out']
-            out['warp_mask'] = None if 'warp_mask' not in generated_out else generated_out['warp_mask']
-            out['warp_cycle'] = None if 'warp_cycle' not in generated_out else generated_out['warp_cycle']
-            out['warp_tmp'] = None if 'warp_tmp' not in generated_out else generated_out['warp_tmp']
-            out['weight1'] = None if 'weight1' not in generated_out else generated_out['weight1']
-            out['weight2'] = None if 'weight2' not in generated_out else generated_out['weight2']
-            out['conf_map'] = None if 'conf_map' not in generated_out else generated_out['conf_map']
 
             return g_loss, out
 
         elif mode == 'discriminator':
+            real_image, input_semantics, ref_image = self.preprocess_input(data.copy(), mode=mode)
             d_loss = self.compute_discriminator_loss(
                 input_semantics, real_image, ref_image, GforD)
             return d_loss
         elif mode == 'inference':
+            input_semantics, ref_image = self.preprocess_input(data.copy(), mode=mode)
             out = {}
             with torch.no_grad():
                 out = self.inference(input_semantics, ref_image)
-            out['input_semantics'] = input_semantics
             return out
         else:
             raise ValueError("|mode| is invalid")
@@ -82,12 +75,9 @@ class Pix2PixModel(torch.nn.Module):
     def create_optimizers(self, opt):
         G_params, D_params = list(), list()
         G_params += [{'params': self.net['netG'].parameters(), 'lr': opt.lr * 0.5}]
-        G_params += [{'params': self.net['netCorr'].parameters(), 'lr': opt.lr * 0.5}]
 
         if opt.isTrain:
             D_params += list(self.net['netD'].parameters())
-            if opt.weight_domainC > 0 and opt.domain_rela:
-                D_params += list(self.net['netDomainClassifier'].parameters())
 
         if opt.no_TTUR:
             beta1, beta2 = opt.beta1, opt.beta2
@@ -103,9 +93,6 @@ class Pix2PixModel(torch.nn.Module):
     def save(self, epoch):
         util.save_network(self.net['netG'], 'G', epoch, self.opt)
         util.save_network(self.net['netD'], 'D', epoch, self.opt)
-        util.save_network(self.net['netCorr'], 'Corr', epoch, self.opt)
-        if self.opt.weight_domainC > 0 and self.opt.domain_rela: 
-            util.save_network(self.net['netDomainClassifier'], 'DomainClassifier', epoch, self.opt)
 
     ############################################################################
     # Private helper methods
@@ -115,28 +102,24 @@ class Pix2PixModel(torch.nn.Module):
         net = {}
         net['netG'] = networks.define_G(opt)
         net['netD'] = networks.define_D(opt) if opt.isTrain else None
-        net['netCorr'] = networks.define_Corr(opt)
-        net['netDomainClassifier'] = networks.define_DomainClassifier(opt) if opt.weight_domainC > 0 and opt.domain_rela else None
 
         if not opt.isTrain or opt.continue_train:
-            net['netG'] = util.load_network(net['netG'], 'G', opt.which_epoch, opt)
+            net['netG'] = util.load_network(net['netG'], 'G', opt.epoch, opt)
             if opt.isTrain:
-                net['netD'] = util.load_network(net['netD'], 'D', opt.which_epoch, opt)
-            net['netCorr'] = util.load_network(net['netCorr'], 'Corr', opt.which_epoch, opt)
-            if opt.weight_domainC > 0 and opt.domain_rela:
-                net['netDomainClassifier'] = util.load_network(net['netDomainClassifier'], 'DomainClassifier', opt.which_epoch, opt)
+                net['netD'] = util.load_network(net['netD'], 'D', opt.epoch, opt)
             if (not opt.isTrain) and opt.use_ema:
-                net['netG'] = util.load_network(net['netG'], 'G_ema', opt.which_epoch, opt)
-                net['netCorr'] = util.load_network(net['netCorr'], 'netCorr_ema', opt.which_epoch, opt)
+                net['netG'] = util.load_network(net['netG'], 'G_ema', opt.epoch, opt)
         return net
-        #return netG_stage1, netD_stage1, netG, netD, netE, netCorr
 
     # preprocess the input, such as moving the tensors to GPUs and
     # transforming the label map to one-hot encoding
     # |data|: dictionary of the input data
 
-    def preprocess_input(self, data):
-        return data['image'].cuda(), data['label'].cuda(), data['ref'].cuda(), data['lip_image'].cuda()
+    def preprocess_input(self, data, mode):
+        if mode == 'inference':
+            return data['label'].cuda(), data['ref'].cuda()
+        
+        return data['image'].cuda(), data['label'].cuda(), data['ref'].cuda()
 
     def get_ctx_loss(self, source, target):
         contextual_style5_1 = torch.mean(self.contextual_forward_loss(source[-1], target[-1].detach())) * 8
@@ -147,20 +130,9 @@ class Pix2PixModel(torch.nn.Module):
             return contextual_style5_1 + contextual_style4_1 + contextual_style3_1 + contextual_style2_1
         return contextual_style5_1 + contextual_style4_1 + contextual_style3_1
 
-    def compute_generator_loss(self, input_semantics, real_image, ref_image, lip_image):
+    def compute_generator_loss(self, input_semantics, real_image, ref_image):
         G_losses = {}
         generate_out = self.generate_fake(input_semantics, real_image, ref_image)
-
-        if 'loss_novgg_featpair' in generate_out and generate_out['loss_novgg_featpair'] is not None:
-            G_losses['no_vgg_feat'] = generate_out['loss_novgg_featpair']
-
-        if self.opt.warp_cycle_w > 0:
-            ref = F.avg_pool2d(ref_image, self.opt.warp_stride)
-
-            G_losses['G_warp_cycle'] = F.l1_loss(generate_out['warp_cycle'], ref) * self.opt.warp_cycle_w
-                
-        if self.opt.warp_self_w > 0:
-            G_losses['G_warp_self'] = torch.mean(F.l1_loss(generate_out['warp_tmp'], lip_image)) * self.opt.warp_self_w
 
         pred_fake, pred_real = self.discriminate(input_semantics, generate_out['fake_image'], real_image, ref_image)
 
@@ -186,7 +158,7 @@ class Pix2PixModel(torch.nn.Module):
             loss += weights[i] * F.l1_loss(fake_features[i], generate_out['real_features'][i].detach())
         G_losses['fm'] = loss * self.opt.lambda_vgg * self.opt.fm_ratio
 
-        G_losses['contextual'] = self.get_ctx_loss(fake_features, generate_out['ref_features']) * self.opt.lambda_vgg * self.opt.ctx_w
+        # G_losses['contextual'] = self.get_ctx_loss(fake_features, generate_out['ref_features']) * self.opt.lambda_vgg * self.opt.ctx_w
 
         G_losses['L1'] = F.l1_loss(generate_out['fake_image'], real_image) * self.opt.lambda_L1
         
@@ -209,23 +181,19 @@ class Pix2PixModel(torch.nn.Module):
 
     def generate_fake(self, input_semantics, real_image, ref_image):
         generate_out = {}
-        ref_relu1_1, ref_relu2_1, ref_relu3_1, ref_relu4_1, ref_relu5_1 = self.vggnet_fix(ref_image, ['r12', 'r22', 'r32', 'r42', 'r52'], preprocess=True)
-        
-        coor_out = self.net['netCorr'](ref_image, real_image, input_semantics)
+        # ref_relu1_1, ref_relu2_1, ref_relu3_1, ref_relu4_1, ref_relu5_1 = self.vggnet_fix(ref_image, ['r12', 'r22', 'r32', 'r42', 'r52'], preprocess=True)
 
-        generate_out['ref_features'] = [ref_relu1_1, ref_relu2_1, ref_relu3_1, ref_relu4_1, ref_relu5_1]
+        # generate_out['ref_features'] = [ref_relu1_1, ref_relu2_1, ref_relu3_1, ref_relu4_1, ref_relu5_1]
         generate_out['real_features'] = self.vggnet_fix(real_image, ['r12', 'r22', 'r32', 'r42', 'r52'], preprocess=True)
 
-        generate_out['fake_image'] = self.net['netG'](warp_out=coor_out['warp_out'])
+        generate_out['fake_image'] = self.net['netG'](ref_image, input_semantics)
 
-        generate_out = {**generate_out, **coor_out}
         return generate_out
 
     def inference(self, input_semantics, ref_image):
         generate_out = {}
-        coor_out = self.net['netCorr'](ref_image, None, input_semantics)
-        generate_out['fake_image'] = self.net['netG'](warp_out=coor_out['warp_out'])
-        generate_out = {**generate_out, **coor_out}
+        generate_out['fake_image'] = self.net['netG'](ref_image, input_semantics)
+
         return generate_out
 
     # Given fake and real image, return the prediction of discriminator

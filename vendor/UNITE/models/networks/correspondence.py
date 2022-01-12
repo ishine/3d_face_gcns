@@ -4,37 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.utils as vutils
 from models.networks.base_network import BaseNetwork
-from models.networks.generator import AdaptiveFeatureGenerator, DomainClassifier, ReverseLayerF
+from models.networks.generator import AdaptiveFeatureGenerator, DomainClassifier, ReverseLayerF, ResidualBlock
 from util.util import vgg_preprocess
 import util.util as util
 from .geomloss import SamplesLoss
 from PIL import Image
 import torch.nn.utils.spectral_norm as spectral_norm
-
-class ResidualBlock(nn.Module):
-
-    def __init__(self, in_channels, out_channels, kernel_size=3, padding=1, stride=1):
-        super(ResidualBlock, self).__init__()
-        self.padding1 = nn.ReflectionPad2d(padding)
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
-        self.bn1 = nn.InstanceNorm2d(out_channels)
-        self.prelu = nn.PReLU()
-        self.padding2 = nn.ReflectionPad2d(padding)
-        self.conv2 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=0, stride=stride)
-        self.bn2 = nn.InstanceNorm2d(out_channels)
-
-    def forward(self, x):
-        residual = x
-        out = self.padding1(x)
-        out = self.conv1(out)
-        out = self.bn1(out)
-        out = self.prelu(out)
-        out = self.padding2(out)
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out += residual
-        out = self.prelu(out)
-        return out
 
 class WTA_scale(torch.autograd.Function):
     """

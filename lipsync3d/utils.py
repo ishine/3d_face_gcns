@@ -822,17 +822,21 @@ def viterbi_algorithm(src_dir, tg_path):
     full_delta_list = util.load_coef(os.path.join(src_dir, 'delta'))
     
     delta_list = []
+    crop_lip_indices = []
     for target_ele, gen_ele in zip(target, gen_seq):
         for i in range(target_ele.duration):
             if target_ele.pho == 'silent':
-                delta_list.append(torch.zeros((64, 1)))            
+                delta_list.append(torch.zeros((64, 1)))
+                crop_lip_indices.append(0)            
             elif (i == (target_ele.duration // 2)):
                 delta_list.append(full_delta_list[gen_ele.seg_info["indices"][gen_ele.duration // 2]])
+                crop_lip_indices.append(gen_ele.seg_info["indices"][gen_ele.duration // 2])
             else:
                 delta_list.append(None)
+                crop_lip_indices.append(gen_ele.seg_info["indices"][gen_ele.duration // 2])
                 
     interpolated_delta_list = delta_interpolation(delta_list)
-    return interpolated_delta_list
+    return interpolated_delta_list, crop_lip_indices
 
 
 def delta_interpolation(delta_list):

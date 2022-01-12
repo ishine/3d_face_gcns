@@ -7,6 +7,7 @@ set -ex
 
 target_dir="data/tcdtimit4"
 source_dir="data/tcdtimit4"
+tg_path="data/tcdtimit_test/42_sx97.TextGrid"
 tg_audio_path="data/tcdtimit_test/sx97_audio.wav"
 # video_dir="data/kkj/kkj04_short/KKJ04_short.mp4"
 
@@ -70,38 +71,34 @@ end_time="240"
 
 
 # train neural face renderer
-# python vendor/neural_face_renderer/train.py \
-#     --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
-#     --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
-#     --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
-#     --n_epochs_decay 0 --load_size 256
+python vendor/neural_face_renderer/train.py \
+    --dataroot $target_dir/nfr/AB --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
+    --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode temporal --norm batch --pool_size 0 --use_refine \
+    --input_nc 21 --Nw 7 --batch_size 16 --preprocess none --num_threads 4 --n_epochs 250 \
+    --n_epochs_decay 0 --load_size 256
 
 
 # ---------- train UNITE neura lface renderer ----------
-python3 vendor/UNITE/train.py \
-	--name tcdtimit4 \
-	--dataset_mode exemplar_train \
-	--dataroot $target_dir \
-    --checkpoints_dir $target_dir/ckpts \
-	--correspondence 'ot' \
-    --Nw 7 \
-    --preprocess none \
-    --num_threads 4 \
-	--niter 150 \
-	--niter_decay 150 \
-	--use_attention \
-	--weight_mask 100.0 \
-	--warp_self_w 100.0 \
-	--warp_cycle_w 1 \
-	--vgg_normal_correct \
-	--fm_ratio 1.0 \
-	--PONO \
-	--PONO_C \
-	--use_coordconv \
-	--adaptor_nonlocal \
-	--ctx_w 1.0 \
-	--batch_size 4 \
-	--gpu_ids 0,1,2,3
+# python3 vendor/UNITE/train.py \
+# 	--name tcdtimit4 \
+# 	--dataset_mode exemplar_train \
+# 	--dataroot $target_dir \
+#     --checkpoints_dir $target_dir/ckpts \
+#     --Nw 7 \
+#     --preprocess none \
+#     --num_threads 2 \
+# 	--niter 150 \
+# 	--niter_decay 150 \
+# 	--use_attention \
+# 	--vgg_normal_correct \
+# 	--fm_ratio 1.0 \
+# 	--PONO \
+# 	--PONO_C \
+# 	--use_coordconv \
+# 	--adaptor_nonlocal \
+# 	--ctx_w 1.0 \
+# 	--batch_size 8 \
+# 	--gpu_ids 0,1,2,3
 
 
 
@@ -129,6 +126,8 @@ python3 vendor/UNITE/train.py \
 
 # python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
+# python reenact_tg.py --tgt_dir $target_dir --tg_path $tg_path
+
 # choose best epoch with lowest loss
 # epoch=100
 
@@ -148,6 +147,29 @@ python3 vendor/UNITE/train.py \
 #     --dataroot $source_dir/reenact_tg/42_sx97 \
 #     --results_dir $source_dir \
 #     --epoch $epoch
+
+# ---------- inference UNITE neural face renderer ----------
+# epoch=latest
+
+# python3 vendor/UNITE/test.py \
+# 	--name tcdtimit4 \
+# 	--dataset_mode exemplar_test \
+# 	--dataroot $target_dir \
+#     --checkpoints_dir $target_dir/ckpts \
+#     --Nw 7 \
+#     --preprocess none \
+#     --num_threads 1 \
+# 	--use_attention \
+# 	--vgg_normal_correct \
+# 	--PONO \
+# 	--PONO_C \
+# 	--use_coordconv \
+# 	--adaptor_nonlocal \
+# 	--batch_size 1 \
+# 	--gpu_ids 0 \
+# 	--no_flip \
+# 	--serial_batches \
+# 	--epoch $epoch
 
 # composite lower face back to original video
 # python comp.py --src_dir $source_dir --tgt_dir $target_dir
@@ -182,4 +204,4 @@ python3 vendor/UNITE/train.py \
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $tg_audio_path\
 #     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/render_viterbi_sx97_interpolation.mp4
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/unite_viterbi_sx97_interpolation.mp4

@@ -55,12 +55,14 @@ class BaseOptions():
         parser.add_argument('--cache_filelist_write', action='store_true', help='saves the current filelist into a text file, so that it loads faster')
         parser.add_argument('--cache_filelist_read', action='store_true', help='reads from the file list cache')
         parser.add_argument('--preprocess', type=str, default='resize_and_crop', help='scaling and cropping of images at load time [resize_and_crop | crop | scale_width | scale_width_and_crop | none]')
+        parser.add_argument('--Nw', type=int, default=7, help='number of window of input label')
+        parser.add_argument('--num_threads', type=int, default=4, help='number of workers')
         
         # for displays
         parser.add_argument('--display_winsize', type=int, default=400, help='display window size')
 
         # for generator
-        parser.add_argument('--netG', type=str, default='seace', help='selects model to use for netG (pix2pixhd | spade | seace)')
+        parser.add_argument('--netG', type=str, default='nocorr', help='selects model to use for netG (pix2pixhd | spade | seace)')
         parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in first conv layer')
         parser.add_argument('--init_type', type=str, default='xavier', help='network initialization [normal|xavier|kaiming|orthogonal]')
         parser.add_argument('--init_variance', type=float, default=0.02, help='variance of the initialization distribution')

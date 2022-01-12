@@ -9,7 +9,6 @@ from models.networks.sync_batchnorm import DataParallelWithCallback
 from models.pix2pix_model import Pix2PixModel
 from models.networks.generator import EMA
 import util.util as util
-
 class Pix2PixTrainer():
     """
     Trainer creates the model and optimizers, and uses them to
@@ -115,10 +114,7 @@ class Pix2PixTrainer():
             self.old_lr = new_lr
 
     def update_fixed_params(self):
-        for param in self.pix2pix_model_on_one_gpu.net['netCorr'].parameters():
-            param.requires_grad = True
         G_params = [{'params': self.pix2pix_model_on_one_gpu.net['netG'].parameters(), 'lr': self.opt.lr*0.5}]
-        G_params += [{'params': self.pix2pix_model_on_one_gpu.net['netCorr'].parameters(), 'lr': self.opt.lr*0.5}]
         if self.opt.no_TTUR:
             beta1, beta2 = self.opt.beta1, self.opt.beta2
             G_lr = self.opt.lr
