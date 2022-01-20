@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
         mask = mouth_mask(alpha, delta, beta, gamma, rotation, translation)
         mask = mask.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255.0
-        mask = cv2.dilate(mask, np.ones((3,3), np.uint8), iterations=4)
+        mask = cv2.dilate(mask, np.ones((3,3), np.uint8), iterations=10)
         rescaled_mask = rescale_and_paste(crop_region, empty_image, mask)
         rescaled_mask = rescaled_mask[top:bottom, left:right]
         rescaled_mask = cv2.resize(rescaled_mask, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
@@ -60,14 +60,13 @@ if __name__ == '__main__':
 
     create_dir(os.path.join(opt.data_dir, 'nfr', 'A', 'train'))
     create_dir(os.path.join(opt.data_dir, 'nfr', 'B', 'train'))
-    create_dir(os.path.join(opt.data_dir, 'nfr', 'lip_region'))
     fa_3d = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, flip_input=False, device='cuda')
     
     masks = get_file_list(os.path.join(opt.data_dir, 'mask'))
     renders = get_file_list(os.path.join(opt.data_dir, 'render'))
 
-    for i in tqdm(range(len(masks))):
-        mask = cv2.imread(masks[i])
+    for i in tqdm(range(len(full_image_list))):
+        mask = cv2.imread(masks[i]) / 255.0
         render = cv2.imread(renders[i])
         full = cv2.imread(full_image_list[i])
         crop_region = crop_region_list[i]
@@ -80,19 +79,13 @@ if __name__ == '__main__':
         
         rescaled_crop = full[top:bottom, left:right]
         rescaled_crop = cv2.resize(rescaled_crop, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
-        preds = fa_3d.get_landmarks(rescaled_crop)
-        lip_landmark = preds[0][:, :2][48:].astype(int)
-        (x, y, w, h) = cv2.boundingRect(lip_landmark)
         
-        roi = rescaled_crop [y:y + h, x:x + w]
-        cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'crop_lip.png'), roi)
-        
-        masked_crop = cv2.bitwise_and(rescaled_crop, mask)
-        masked_render = cv2.bitwise_and(rescaled_render, mask)
+        masked_crop = rescaled_crop * (1 - mask)
+        masked_render = rescaled_render * mask
+        masked_image = masked_crop + masked_render
 
-        cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'A', 'train', '%05d.png' % (i+1)), masked_crop)
-        cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'B', 'train', '%05d.png' % (i+1)), masked_render)
-        torch.save([y, y + h, x, x + w], os.path.join(opt.data_dir, 'nfr', 'lip_region', '%05d.pt' % (i + 1)))
+        cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'A', 'train', '%05d.png' % (i+1)), rescaled_crop)
+        cv2.imwrite(os.path.join(opt.data_dir, 'nfr', 'B', 'train', '%05d.png' % (i+1)), masked_image)
 
 
     splits = os.listdir(os.path.join(opt.data_dir, 'nfr', 'A'))

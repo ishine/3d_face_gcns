@@ -89,7 +89,7 @@ def crop_per_image(data_dir, dest_size, crop_level):
 
     H, W, _ = frames[0].shape
 
-    batches = [frames[i:i + batch_size] for i in range(0, len(frames), batch_size)]
+    batches = [frames[i:i + batch_size] for i in range(0, (len(frames) // batch_size) * batch_size, batch_size)]
 
     for idx in tqdm(range(len(batches))):
         fb = batches[idx]
@@ -126,8 +126,8 @@ def normalize_and_crop_lip_region(data_dir):
     image_list = util.get_file_list(os.path.join(data_dir, 'full'))
 
     fa_3d = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, flip_input=False, device='cuda')
-
-    for i in tqdm(range(len(image_list))):
+    batch_size = 5
+    for i in tqdm(range((len(image_list) // 5) * 5)):
         image_name = image_list[i]
         image = cv2.imread(image_name)
         preds = fa_3d.get_landmarks(image)
@@ -168,9 +168,9 @@ def normalize_and_crop_lip_region(data_dir):
         roi = output[y:y + h, x:x + w]
         roi = imutils.resize(roi, width=256, inter=cv2.INTER_CUBIC)
         
-        # h, w, _ = roi.shape
-        # resized_roi[:h, :, :] = roi
-        cv2.imwrite(os.path.join(data_dir, 'crop_lip', os.path.basename(image_list[i])), roi)
+        h, w, _ = roi.shape
+        resized_roi[:h, :, :] = roi
+        cv2.imwrite(os.path.join(data_dir, 'crop_lip', os.path.basename(image_list[i])), resized_roi)
 
 
 if __name__ == '__main__':
@@ -181,7 +181,7 @@ if __name__ == '__main__':
     parser.add_argument('--vertical_adjust', type=float, default=0.3, help='Adjust vertical location of portrait in image.')
     args = parser.parse_args()
     util.create_dir(os.path.join(args.data_dir, 'crop_region'))
-    # crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
+    crop_per_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level)
     # crop_image(args.data_dir, dest_size=args.dest_size, crop_level=args.crop_level, vertical_adjust=args.vertical_adjust)
     
     normalize_and_crop_lip_region(args.data_dir)

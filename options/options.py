@@ -18,6 +18,7 @@ class Options:
         self.parser.add_argument('--batch_size', type=int, default=10)
         self.parser.add_argument('--Nw', type=int, default=7)
         self.parser.add_argument('--serial_batches', type=self.str2bool, default=True)
+        self.parser.add_argument('--drop_last', type=self.str2bool, default=True)
         self.parser.add_argument('--num_workers', type=int, default=4)
         self.parser.add_argument('--isTrain', type=self.str2bool, default=True)
         self.parser.add_argument('--max_dataset_size', type=int, default=float("inf"))

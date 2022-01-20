@@ -44,7 +44,7 @@ class NFRModel(BaseModel):
         """
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
+        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake','VGG']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B', 'photo_error']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
@@ -62,8 +62,17 @@ class NFRModel(BaseModel):
 
         if self.isTrain:
             # define loss functions
+            self.vggnet_fix = networks.VGG19_feature_color_torchversion(vgg_normal_correct=True)
+            self.vggnet_fix.load_state_dict(torch.load('vendor/neural_face_renderer/models/vgg19_conv.pth'))
+            self.vggnet_fix.eval()
+            for param in self.vggnet_fix.parameters():
+                param.requires_grad = False
+
+            self.vggnet_fix.to(opt.gpu_ids[0])
+            
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
             self.criterionL1 = torch.nn.L1Loss()
+            self.criterionVGG = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -110,6 +119,16 @@ class NFRModel(BaseModel):
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        
+        fake_features = self.vggnet_fix(self.fake_B, ['r12', 'r22', 'r32', 'r42', 'r52'], preprocess=True)
+        real_features = self.vggnet_fix(self.real_A, ['r12', 'r22', 'r32', 'r42', 'r52'], preprocess=True)
+        weights = [1.0 / 32, 1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0]
+        loss = 0
+        for i in range(len(real_features)):
+            loss += weights[i] * self.criterionVGG(fake_features[i], real_features[i].detach())
+        self.loss_VGG = loss * self.opt.lambda_vgg
+        
+        
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()

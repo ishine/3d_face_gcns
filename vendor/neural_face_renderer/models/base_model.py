@@ -130,7 +130,10 @@ class BaseModel(ABC):
         for name in self.visual_names:
             if isinstance(name, str):
                 if 'real' in name: # for temporal dataset
-                    visual_ret[name] = getattr(self,name)[:,-3:]
+                    if getattr(self, name).shape[1] == 3:
+                        visual_ret[name] = getattr(self,name)[:,-3:]
+                    else:
+                        visual_ret[name] = getattr(self,name)[:,18:21]
                 else:
                     visual_ret[name] = getattr(self, name)
         return visual_ret
