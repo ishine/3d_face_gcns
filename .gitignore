@@ -19,4 +19,3 @@ phoneme_mesh_model_middle.pt
 phoneme_mesh_model_segment.pt
 audiodvp_utils/roi_test
 *.pth
-*.sh
