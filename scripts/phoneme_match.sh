@@ -21,12 +21,11 @@ set -ex
 target_dir="data/studio1"
 source_dir="data/studio_2_0_test"
 tg_path=$source_dir/studio_2_0.TextGrid
-# tg_audio_path="data/tcdtimit_test/sx97_audio.wav"
 target_video_dir=$target_dir/studio_1280.mp4
 source_video_dir=$source_dir/studio_2_0.mp4
 
 # mkdir -p $target_dir/full
-mkdir -p $target_dir/crop
+# mkdir -p $target_dir/crop
 # mkdir -p $target_dir/audio
 # mkdir -p $source_dir/audio
 # mkdir -p $source_dir/results
@@ -39,10 +38,10 @@ mkdir -p $target_dir/crop
 
 
 # # crop and resize video frames
-python audiodvp_utils/crop_portrait.py \
-    --data_dir $target_dir \
-    --crop_level 1.3 \
-    --vertical_adjust 0.2
+# python audiodvp_utils/crop_portrait.py \
+#     --data_dir $target_dir \
+#     --crop_level 1.3 \
+#     --vertical_adjust 0.2
 
 
 # 3D face reconstruction

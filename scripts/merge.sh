@@ -1,12 +1,15 @@
 set -ex
 
 target_dir="data/studio1"
+inputs=""
+i=0
 
 for f in $target_dir/clip/*.mp4
 do
-    echo file \'clip/${f##*/}\' >> $target_dir/flist.txt
+    inputs="${inputs} -i ${f}"
+    ((i=i+1))
 done
 
-ffmpeg -f concat -safe 0 -i $target_dir/flist.txt -c copy $target_dir/studio.mp4
+ffmpeg $inputs -filter_complex concat=n=$i:v=1:a=0 $target_dir/studio.mp4 -y
 
 ffmpeg -i $target_dir/studio.mp4 -vf scale=1280:720 $target_dir/studio_1280.mp4

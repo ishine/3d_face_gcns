@@ -9,7 +9,7 @@ from options.options import Options
 from audiodvp_utils.util import create_dir, load_coef, get_file_list, get_max_crop_region
 from audiodvp_utils.rescale_image import rescale_and_paste
 import scipy.io as sio
-from lipsync3d.utils import get_downsamp_trans, viterbi_algorithm
+from lipsync3d.utils import viterbi_algorithm
 
 
 if __name__ == '__main__':

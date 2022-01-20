@@ -538,11 +538,11 @@ def get_viseme_list(src_dir):
     return audio_viseme
 
 
-def get_metadata(src_dir):
+def get_metadata(src_dir, is_kor=True):
     metadata_path = os.path.join(src_dir, 'metadata.pt')
     
-    if os.path.exists(metadata_path):
-        return torch.load(metadata_path)
+    # if os.path.exists(metadata_path):
+    #     return torch.load(metadata_path)
     
     image_list = util.get_file_list(os.path.join(src_dir, 'crop'))
     num_frames = len(image_list)
@@ -556,9 +556,9 @@ def get_metadata(src_dir):
         lines = f.readlines()
         for line in lines:
             line = line.strip()
-            fname = line.split(' ')[-1][1:-5]
-            tg_name = "42_{}.TextGrid".format(fname)
-            tg_path = os.path.join(src_dir, "tcdtimit4_textgrid/{}".format(tg_name))   
+            fname = line.split(' ')[-1][6:-5]
+            tg_name = "{}.TextGrid".format(fname)
+            tg_path = os.path.join(src_dir, "textgrid/{}".format(tg_name))   
             textgrid = tgt.io.read_textgrid(tg_path, include_empty_intervals=True)
             tier = textgrid.get_tier_by_name('phones')
             time_in_file = 0
@@ -573,6 +573,7 @@ def get_metadata(src_dir):
                         phoneme_list[i] = p if p != '' else 'silent'
                 
                 time_in_file += e - s
+            
             total_time += int(time_in_file * 60) / 60
     print(total_time)
     pho_segs = {}
@@ -583,7 +584,7 @@ def get_metadata(src_dir):
 
     for idx in range(len(phoneme_list)):
         orig_pho = phoneme_list[idx]
-        if orig_pho[-1].isalpha():
+        if is_kor or orig_pho[-1].isalpha():
             stress = None
             pho = orig_pho
         else:
@@ -748,7 +749,7 @@ class GenElement(object):
         self.seg_info = seg_info
         
 
-def textgrid2targetseq(tg_path):
+def textgrid2targetseq(tg_path, is_kor=True):
     target_seq = []
     total_time = 0
   
@@ -758,7 +759,7 @@ def textgrid2targetseq(tg_path):
         s, e, p = t.start_time, t.end_time, t.text
         orig_pho = p if p != '' else 'silent'
         
-        if orig_pho[-1].isalpha():
+        if is_kor or orig_pho[-1].isalpha():
             pho = orig_pho
             stress = None
         else:
