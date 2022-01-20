@@ -10,6 +10,6 @@ do
     ((i=i+1))
 done
 
-ffmpeg $inputs -filter_complex concat=n=$i:v=1:a=0 $target_dir/studio.mp4 -y
+ffmpeg $inputs -filter_complex concat=n=$i:v=1:a=1 $target_dir/studio.mp4 -y
 
 ffmpeg -i $target_dir/studio.mp4 -vf scale=1280:720 $target_dir/studio_1280.mp4
