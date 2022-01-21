@@ -45,15 +45,15 @@ source_video_dir=$source_dir/studio_2_0.mp4
 
 
 # 3D face reconstruction
-# python train.py \
-#     --data_dir $target_dir \
-#     --num_epoch 30 \
-#     --serial_batches False \
-#     --display_freq 200 \
-#     --print_freq 200 \
-#     --batch_size 5 \
-#     --epoch_tex 5 \
-#     --epoch_warm_up 15
+python train.py \
+    --data_dir $target_dir \
+    --num_epoch 30 \
+    --serial_batches False \
+    --display_freq 200 \
+    --print_freq 200 \
+    --batch_size 5 \
+    --epoch_tex 5 \
+    --epoch_warm_up 15
 
 
 # build neural face renderer data pair

@@ -643,11 +643,9 @@ def get_concatenation_cost(src_dir):
     n_segments = metadata["n_segments"]
     delta_list = util.load_coef(os.path.join(src_dir, 'delta'))
     
-    downsamp_trans = get_downsamp_trans()
     matlab_data_path = 'renderer/data/data.mat'
     mat_data = sio.loadmat(matlab_data_path)
-    exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
-    exp_base = torch.mm(downsamp_trans, exp_base).reshape(-1, 64).double()
+    exp_base = torch.from_numpy(mat_data['exp_base']).double()
         
     st_deltas = torch.zeros((n_segments, 64))
     ed_deltas = torch.zeros((n_segments, 64))
