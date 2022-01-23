@@ -29,7 +29,7 @@ source_video_dir=$source_dir/studio_2_0.mp4
 # mkdir -p $target_dir/audio
 # mkdir -p $source_dir/audio
 # mkdir -p $source_dir/results
-
+mkdir -p $target_dir/results
 
 # 1. Take all frames and audio of training data
 # ffmpeg -hide_banner -y -i $target_video_dir -r 25 $target_dir/full/%05d.png
@@ -45,19 +45,19 @@ source_video_dir=$source_dir/studio_2_0.mp4
 
 
 # 3D face reconstruction
-python train.py \
-    --data_dir $target_dir \
-    --num_epoch 30 \
-    --serial_batches False \
-    --display_freq 200 \
-    --print_freq 200 \
-    --batch_size 5 \
-    --epoch_tex 5 \
-    --epoch_warm_up 15
+# python train.py \
+#     --data_dir $target_dir \
+#     --num_epoch 30 \
+#     --serial_batches False \
+#     --display_freq 200 \
+#     --print_freq 200 \
+#     --batch_size 5 \
+#     --epoch_tex 5 \
+#     --epoch_warm_up 15
 
 
 # build neural face renderer data pair
-# python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
+python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/nfr/A/train/%05d.png \
@@ -68,11 +68,11 @@ python train.py \
 
 
 # train neural face renderer
-# python vendor/neural_face_renderer/train.py \
-#     --dataroot $target_dir --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
-#     --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode exemplar_train --norm batch --pool_size 0 --use_refine \
-#     --input_nc 42 --Nw 7 --batch_size 8 --preprocess none --num_threads 4 --n_epochs 250 \
-#     --n_epochs_decay 0 --load_size 256
+python vendor/neural_face_renderer/train.py \
+    --dataroot $target_dir --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
+    --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode exemplar_train --norm batch --pool_size 0 --use_refine \
+    --input_nc 42 --Nw 7 --batch_size 8 --preprocess none --num_threads 4 --n_epochs 250 \
+    --n_epochs_decay 0 --load_size 256
 
 # python reenact_tg.py --tgt_dir $target_dir --tg_path $tg_path
 
@@ -104,6 +104,6 @@ python train.py \
 # create final result
 # ------ commands for making video using image files ------
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp.mp4
+#     -thread_queue_size 8192 -i $target_dir/audio/audio.wav \
+#     -thread_queue_size 8192 -i $target_dir/render/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $target_dir/results/render.mp4
