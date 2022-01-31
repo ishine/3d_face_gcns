@@ -97,7 +97,7 @@ end_time="240"
 #     --net_dir $target_dir \
 #     --net_name_prefix ''
 
-# python reenact.py --src_dir $source_dir --tgt_dir $target_dir
+python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
 # python reenact_tg.py --tgt_dir $target_dir --tg_path $tg_path
 
@@ -142,15 +142,15 @@ end_time="240"
 #     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/debug.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -thread_queue_size 8192 -i $source_dir/full/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/reenact_deformation/%05d.png \
 #     -i $source_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/compare_reenact_origin.mp4
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/compare_no_defor_and_defor.mp4
 
-ffmpeg -y -loglevel warning \
-    -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-    -thread_queue_size 8192 -i $source_dir/render/%05d.png \
-    -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/render.mp4
+# ffmpeg -y -loglevel warning \
+#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_deformation_transfer.mp4
 
 
 # ffmpeg -y -loglevel warning \

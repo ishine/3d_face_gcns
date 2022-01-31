@@ -15,8 +15,8 @@ from lipsync3d.utils import viterbi_algorithm
 if __name__ == '__main__':
     opt = Options().parse_args()
 
-    reenact_save_path = os.path.join(opt.tgt_dir, 'reenact')
-    reenact_crop_lip_path = os.path.join(opt.tgt_dir, 'reenact_crop_lip')
+    reenact_save_path = os.path.join(opt.src_dir, 'reenact')
+    reenact_crop_lip_path = os.path.join(opt.src_dir, 'reenact_crop_lip')
     create_dir(reenact_save_path)
     create_dir(reenact_crop_lip_path)
     

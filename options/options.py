@@ -80,6 +80,11 @@ class Options:
         self.args = self.parser.parse_args()
         self.args.device = torch.device('cuda:{}'.format(self.args.gpu_ids[0])) if self.args.gpu_ids else torch.device('cpu')
         return self.args
+    
+    def test_parse_args(self):
+        self.args = self.parser.parse_args("")
+        self.args.device = torch.device('cuda:{}'.format(self.args.gpu_ids[0])) if self.args.gpu_ids else torch.device('cpu')
+        return self.args
 
     def str2bool(self, v):
         if isinstance(v, bool):
