@@ -75,29 +75,8 @@ end_time="240"
 #     --input_nc 42 --Nw 7 --batch_size 8 --preprocess none --num_threads 4 --n_epochs 250 \
 #     --n_epochs_decay 0 --load_size 256
 
-# # # train audio2delta network
-# python train_delta.py \
-#     --dataset_mode audio2expression \
-#     --num_epoch 10 \
-#     --serial_batches False \
-#     --display_freq 800 \
-#     --print_freq 800 \
-#     --batch_size 16 \
-#     --gpu_ids 3 \
-#     --lr 1e-4 \
-#     --data_dir $target_dir \
-#     --net_dir $target_dir  \
-#     --net_name_prefix ''
 
-
-# # predict expression parameter from audio feature
-# python test_delta.py --dataset_mode audio2expression \
-#     --gpu_ids 3 \
-#     --data_dir $source_dir \
-#     --net_dir $target_dir \
-#     --net_name_prefix ''
-
-python reenact.py --src_dir $source_dir --tgt_dir $target_dir
+# python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
 # python reenact_tg.py --tgt_dir $target_dir --tg_path $tg_path
 
@@ -150,7 +129,7 @@ python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
 #     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_deformation_transfer.mp4
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_mouth_retrieve_debug.mp4
 
 
 # ffmpeg -y -loglevel warning \

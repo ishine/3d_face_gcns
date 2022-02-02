@@ -47,33 +47,33 @@ class ExemplarTestDataset(BaseDataset):
         if index < self.Nw // 2:
             for i in range(self.Nw // 2 - index):
                 label_Image = label_transform(self.label_Images[0])
-                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[139])
+                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[0])
                 list_label.append(label_Image)
                 list_label.append(crop_lip_Image)
 
             for i in range(index + self.Nw // 2 + 1):
                 label_Image = label_transform(self.label_Images[i])
-                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[139])
+                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[i])
                 list_label.append(label_Image)
                 list_label.append(crop_lip_Image)
 
         elif index > len(self) - self.Nw // 2 - 1:
             for i in range(index - self.Nw // 2, len(self)):
                 label_Image = label_transform(self.label_Images[i])
-                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[139])
+                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[i])
                 list_label.append(label_Image)
                 list_label.append(crop_lip_Image)
                 
             for i in range(index + self.Nw // 2 - len(self) + 1):
                 label_Image = label_transform(self.label_Images[-1])
-                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[139])
+                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[-1])
                 list_label.append(label_Image)
                 list_label.append(crop_lip_Image)
 
         else:
             for i in range(index - self.Nw // 2, index + self.Nw // 2 + 1):
                 label_Image = label_transform(self.label_Images[i])
-                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[139])
+                crop_lip_Image = crop_lip_transform(self.crop_lip_Images[i])
                 list_label.append(label_Image)
                 list_label.append(crop_lip_Image)
 

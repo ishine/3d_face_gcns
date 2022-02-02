@@ -1,5 +1,3 @@
-import sys
-sys.path.append('/home/server01/jyeongho_workspace/3d_face_gcns/')
 import math
 import torch
 import torch.nn as nn
@@ -14,7 +12,6 @@ from gcn_util import utils
 import numpy as np
 import scipy.io as sio
 from torch.nn import functional as F
-from lipsync3d.utils import get_downsamp_trans
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -197,34 +194,6 @@ class ResnetFaceModelOptimizer(nn.Module):
 
         return alpha, delta, beta, gamma, rotation, translation, render, mask, screen_vertices, tex, refined_tex
     
-
-class ResnetDeltaModel(nn.Module):
-    def __init__(self, opt):
-        super(ResnetDeltaModel, self).__init__()
-        self.pretrained_model = ResNet()
-        self.fc = nn.Linear(2048, 64)
-        self.facemodel = FaceModel(opt=opt, batch_size=opt.batch_size)
-
-        self.init_weights(opt.pretrained_model_path)
-        self.to(opt.device)
-        
-        self.downsamp_trans = get_downsamp_trans()
-        mat_data = sio.loadmat(opt.matlab_data_path)
-        exp_base = torch.from_numpy(mat_data['exp_base']).reshape(-1, 3 * 64)
-        self.exp_base = torch.mm(self.downsamp_trans, exp_base).reshape(-1, 64).unsqueeze(0).expand(opt.batch_size, -1, -1).to(opt.device)
-
-    def init_weights(self, pretrained_model_path):
-        util.load_state_dict(self.pretrained_model, pretrained_model_path)
-
-        torch.nn.init.zeros_(self.fc.weight)
-        torch.nn.init.zeros_(self.fc.bias)
-
-    def forward(self, x, reference_geometry, rotation, translation):
-        delta = self.fc(self.pretrained_model(x)).unsqueeze(-1) # B x 64 x 1
-        geometry_pred = reference_geometry + self.exp_base.bmm(delta).view(-1, 478, 3)
-        
-        mediapipe_mesh_pred = self.facemodel.geometry_to_pixel(geometry_pred, rotation, translation)
-        return delta, mediapipe_mesh_pred
 
 
 class CoefficientRegularization(nn.Module):

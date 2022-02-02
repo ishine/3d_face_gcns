@@ -57,7 +57,7 @@ mkdir -p $target_dir/results
 
 
 # build neural face renderer data pair
-python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
+# python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
 #     -thread_queue_size 8192 -i $target_dir/nfr/A/train/%05d.png \
@@ -68,42 +68,42 @@ python audiodvp_utils/build_nfr_dataset.py --data_dir $target_dir
 
 
 # train neural face renderer
-python vendor/neural_face_renderer/train.py \
-    --dataroot $target_dir --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
-    --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode exemplar_train --norm batch --pool_size 0 --use_refine \
-    --input_nc 42 --Nw 7 --batch_size 8 --preprocess none --num_threads 4 --n_epochs 250 \
-    --n_epochs_decay 0 --load_size 256
+# python vendor/neural_face_renderer/train.py \
+#     --dataroot $target_dir --name nfr --model nfr --checkpoints_dir $target_dir/ckpts \
+#     --netG unet_256 --direction BtoA --lambda_L1 100 --dataset_mode exemplar_train --norm batch --pool_size 0 --use_refine \
+#     --input_nc 42 --Nw 7 --batch_size 8 --preprocess none --num_threads 4 --n_epochs 250 \
+#     --n_epochs_decay 0 --load_size 256
 
-# python reenact_tg.py --tgt_dir $target_dir --tg_path $tg_path
+# python reenact_tg.py --tgt_dir $target_dir --tg_path $tg_path --src_dir $source_dir
 
 # choose best epoch with lowest loss
-# epoch=100
+epoch=100
 
 # neural rendering the reenact face sequence
-# python vendor/neural_face_renderer/test.py --model test \
-#     --netG unet_256 \
-#     --direction BtoA \
-#     --dataset_mode exemplar_test \
-#     --norm batch \
-#     --input_nc 42 \
-#     --Nw 7 \
-#     --preprocess none \
-#     --eval \
-#     --use_refine \
-#     --name nfr \
-#     --checkpoints_dir $target_dir/ckpts \
-#     --dataroot $source_dir \
-#     --results_dir $source_dir \
-#     --epoch $epoch
+python vendor/neural_face_renderer/test.py --model test \
+    --netG unet_256 \
+    --direction BtoA \
+    --dataset_mode exemplar_test \
+    --norm batch \
+    --input_nc 42 \
+    --Nw 7 \
+    --preprocess none \
+    --eval \
+    --use_refine \
+    --name nfr \
+    --checkpoints_dir $target_dir/ckpts \
+    --dataroot $source_dir \
+    --results_dir $source_dir \
+    --epoch $epoch
 
 
 # composite lower face back to original video
-# python comp.py --src_dir $source_dir --tgt_dir $target_dir
+python comp.py --src_dir $source_dir --tgt_dir $target_dir
 
 
 # create final result
 # ------ commands for making video using image files ------
-# ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $target_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $target_dir/render/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $target_dir/results/render.mp4
+ffmpeg -y -loglevel warning \
+    -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+    -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+    -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_test.mp4

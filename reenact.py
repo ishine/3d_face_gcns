@@ -10,6 +10,7 @@ from audiodvp_utils.util import create_dir, load_coef, load_face_emb, get_file_l
 from audiodvp_utils.rescale_image import rescale_and_paste
 import scipy.io as sio
 from audiodvp_utils.deformation_transfer import transformation
+from audiodvp_utils.mouth_retrieval import mouth_retrieval
 
 
 if __name__ == '__main__':
@@ -19,6 +20,7 @@ if __name__ == '__main__':
     create_dir(os.path.join(opt.src_dir, 'reenact_crop_lip'))
     alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
     beta_list = load_coef(os.path.join(opt.tgt_dir, 'beta'))
+    tgt_delta_list = load_coef(os.path.join(opt.tgt_dir, 'delta'))
     src_delta_list = load_coef(os.path.join(opt.src_dir, 'delta'))
     src_alpha_list = load_coef(os.path.join(opt.src_dir, 'alpha'))
     gamma_list = load_coef(os.path.join(opt.tgt_dir, 'gamma'))
@@ -30,7 +32,8 @@ if __name__ == '__main__':
     crop_lip_image_list = get_file_list(os.path.join(opt.tgt_dir, 'crop_lip'))
 
     opt.data_dir = opt.tgt_dir
-
+    retrieval = mouth_retrieval(opt, tgt_delta_list, crop_lip_image_list)
+    
     opt.batch_size = 1
     transfer = transformation(opt, src_alpha_list[0], alpha_list[0])
     face_model = FaceModel(opt=opt, batch_size=1, load_model=True)
@@ -41,8 +44,11 @@ if __name__ == '__main__':
         alpha = alpha_list[0].unsqueeze(0).cuda()
         beta = beta_list[0].unsqueeze(0).cuda()
         delta = src_delta_list[i]
-        new_delta = transfer.deformation_transfer(delta).unsqueeze(0).cuda() 
-        crop_lip_image = cv2.imread(crop_lip_image_list[i])
+        new_delta = transfer.deformation_transfer(delta)
+        crop_lip_index = retrieval.retrieve(new_delta)
+        crop_lip_image = cv2.imread(crop_lip_image_list[crop_lip_index])
+        
+        new_delta = new_delta.unsqueeze(0).cuda()
         
         # idx = i % (opt.offset_end - opt.offset_start ) + opt.offset_start
         idx = i
