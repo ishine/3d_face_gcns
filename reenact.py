@@ -29,10 +29,13 @@ if __name__ == '__main__':
     crop_region_list = load_coef(os.path.join(opt.tgt_dir, 'crop_region'))
     full_image_list = get_file_list(os.path.join(opt.tgt_dir, 'full'))
     masks = get_file_list(os.path.join(opt.tgt_dir, 'mask'))
-    crop_lip_image_list = get_file_list(os.path.join(opt.tgt_dir, 'crop_lip'))
-
+    tgt_crop_lip_image_list = get_file_list(os.path.join(opt.tgt_dir, 'crop_lip'))
+    src_crop_lip_image_list = get_file_list(os.path.join(opt.src_dir, 'crop_lip'))
     opt.data_dir = opt.tgt_dir
-    retrieval = mouth_retrieval(opt, tgt_delta_list, crop_lip_image_list)
+
+    tgt_crop_lip_h = torch.load(os.path.join(opt.tgt_dir, 'crop_lip_h.pt'))
+    src_crop_lip_h = torch.load(os.path.join(opt.src_dir, 'crop_lip_h.pt'))
+    retrieval = mouth_retrieval(opt, tgt_delta_list, tgt_crop_lip_h, tgt_crop_lip_image_list)
     
     opt.batch_size = 1
     transfer = transformation(opt, src_alpha_list[0], alpha_list[0])
@@ -45,8 +48,8 @@ if __name__ == '__main__':
         beta = beta_list[0].unsqueeze(0).cuda()
         delta = src_delta_list[i]
         new_delta = transfer.deformation_transfer(delta)
-        crop_lip_index = retrieval.retrieve(new_delta)
-        crop_lip_image = cv2.imread(crop_lip_image_list[crop_lip_index])
+        crop_lip_index = retrieval.retrieve(new_delta, src_crop_lip_image_list[i], src_crop_lip_h[i])
+        crop_lip_image = cv2.imread(tgt_crop_lip_image_list[crop_lip_index])
         
         new_delta = new_delta.unsqueeze(0).cuda()
         

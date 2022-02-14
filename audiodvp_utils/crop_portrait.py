@@ -127,6 +127,7 @@ def normalize_and_crop_lip_region(data_dir):
 
     fa_3d = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, flip_input=False, device='cuda')
     batch_size = 5
+    crop_lip_h = []
     for i in tqdm(range((len(image_list) // 5) * 5)):
         image_name = image_list[i]
         image = cv2.imread(image_name)
@@ -169,8 +170,11 @@ def normalize_and_crop_lip_region(data_dir):
         roi = imutils.resize(roi, width=256, inter=cv2.INTER_CUBIC)
         
         h, w, _ = roi.shape
+        crop_lip_h.append(h)
         resized_roi[:h, :, :] = roi
         cv2.imwrite(os.path.join(data_dir, 'crop_lip', os.path.basename(image_list[i])), resized_roi)
+        
+    torch.save(crop_lip_h, os.path.join(data_dir, 'crop_lip_h.pt'))
 
 
 if __name__ == '__main__':

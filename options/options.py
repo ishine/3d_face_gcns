@@ -25,7 +25,7 @@ class Options:
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
 
         self.parser.add_argument('--lr', type=float, default=2e-5, help='initial learning rate for adam')
-
+        self.parser.add_argument('--only_expr', type=self.str2bool, default=False)
         self.parser.add_argument('--lambda_photo', type=float, default=1.9)
         self.parser.add_argument('--lambda_land', type=float, default=1.6e-3)
         self.parser.add_argument('--lambda_reg', type=float, default=3e-4)

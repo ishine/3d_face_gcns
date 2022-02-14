@@ -87,7 +87,7 @@ class ResnetModel:
 
 
     def backward(self, epoch):
-        self.loss_Photometric = self.criterionPhotometric(self.render, self.masked_gt) if self.opt.lambda_photo > 0.0 else 0.0
+        self.loss_Photometric = self.criterionPhotometric(self.render, self.masked_gt) if ((not self.opt.only_expr) and (self.opt.lambda_photo > 0.0)) else 0.0
         self.loss_Landmark = self.criterionLandmark(self.landmark, self.landmark_gt) if self.opt.lambda_land > 0.0 else 0.0
         self.loss_Alpha = self.regularizationAlpha(self.alpha)
         self.loss_Beta = self.regularizationBeta(self.beta)
