@@ -14,7 +14,7 @@ class Renderer(nn.Module):
         self.image_width = image_width
         self.image_height = image_height
 
-        self.rasterizer = Rasterizer()
+        self.rasterizer = Rasterizer(image_width=image_width, image_height=image_height)
         self.shader = SphericalHarmonics(device)
 
     def forward(self, clip_vertices, triangles, normals, diffuse_colors, gamma):

@@ -18,11 +18,13 @@ if __name__ == '__main__':
 
     create_dir(os.path.join(opt.src_dir, 'reenact'))
     create_dir(os.path.join(opt.src_dir, 'reenact_crop_lip'))
+    create_dir(os.path.join(opt.src_dir, 'reenact_landmarks'))
+
     alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
     beta_list = load_coef(os.path.join(opt.tgt_dir, 'beta'))
     tgt_delta_list = load_coef(os.path.join(opt.tgt_dir, 'delta'))
     src_delta_list = load_coef(os.path.join(opt.src_dir, 'delta'))
-    src_alpha_list = load_coef(os.path.join(opt.src_dir, 'alpha'))
+    src_alpha_list = load_coef(os.path.join(opt.tgt_dir, 'alpha'))
     gamma_list = load_coef(os.path.join(opt.tgt_dir, 'gamma'))
     angle_list = load_coef(os.path.join(opt.tgt_dir, 'rotation'))
     translation_list = load_coef(os.path.join(opt.tgt_dir, 'translation'))
@@ -54,7 +56,7 @@ if __name__ == '__main__':
         new_delta = new_delta.unsqueeze(0).cuda()
         
         # idx = i % (opt.offset_end - opt.offset_start ) + opt.offset_start
-        idx = i
+        idx = i % len(full_image_list)
         gamma = gamma_list[idx].unsqueeze(0).cuda()
         rotation = angle_list[idx].unsqueeze(0).cuda()
         translation = translation_list[idx].unsqueeze(0).cuda()
@@ -63,7 +65,7 @@ if __name__ == '__main__':
         mask = cv2.imread(masks[idx]) / 255.0
         H, W, _ = full.shape
         empty_image = np.zeros((H, W, 3), np.uint8)
-        render, _, _, _, _ = face_model(alpha, new_delta, beta, rotation, translation, gamma)
+        render, _, tmp_landmarks, _, _ = face_model(alpha, new_delta, beta, rotation, translation, gamma)
         render = render.squeeze().mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
         
         rescaled_render = rescale_and_paste(crop_region, empty_image, render)
@@ -80,3 +82,22 @@ if __name__ == '__main__':
         
         cv2.imwrite(os.path.join(opt.src_dir, 'reenact', '%05d.png' % (i+1)), masked_image)
         cv2.imwrite(os.path.join(opt.src_dir, 'reenact_crop_lip', '%05d.png' % (i+1)), crop_lip_image)
+        
+        # # Convert landmarks to numpy array
+        # tmp_landmarks = tmp_landmarks.cpu()
+        # shape_np = np.zeros((68, 2), dtype="int")
+        # for idx in range(0, 68):
+        #     landmark = tmp_landmarks[0][idx]
+        #     shape_np[idx] = (landmark[0], landmark[1])
+
+        # # Draw landmarks
+        # for idx, (x, y) in enumerate(shape_np):
+        #     render_landmark = cv2.circle(render, (x, y), 3, (255, 0, 0), -1)
+                    
+        # # Landmark frames
+        # rescaled_render_landmark = rescale_and_paste(crop_region, empty_image, render_landmark)
+        # rescaled_render_landmark = cv2.cvtColor(rescaled_render_landmark, cv2.COLOR_RGB2BGR)
+        # rescaled_render_landmark = rescaled_render_landmark[top:bottom, left:right]
+        # rescaled_render_landmark = cv2.resize(rescaled_render_landmark, (opt.image_width, opt.image_height), interpolation=cv2.INTER_AREA)
+        
+        # cv2.imwrite(os.path.join(opt.src_dir, 'reenact_landmarks', '%05d.png' % (i+1)), rescaled_render_landmark)

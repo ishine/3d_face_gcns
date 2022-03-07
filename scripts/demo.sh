@@ -121,15 +121,15 @@ end_time="240"
 #     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $target_dir/results/debug.mp4
 
 # /usr/bin/ffmpeg -hide_banner -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/reenact/%05d.png \
-#     -thread_queue_size 8192 -i $source_dir/reenact_deformation/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/reenact_crop_lip/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/crop_lip/%05d.png \
 #     -i $source_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/compare_no_defor_and_defor.mp4
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/compare_lbp_retrieved_obama.mp4
 
 # ffmpeg -y -loglevel warning \
 #     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
 #     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_mouth_retrieve_debug.mp4
+#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_mouth_retrieve_lbp.mp4
 
 
 # ffmpeg -y -loglevel warning \

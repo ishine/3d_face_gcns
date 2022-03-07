@@ -24,7 +24,7 @@ class FaceModel(nn.Module):
         self.load_data()
 
         self.camera = Camera(opt.device)
-        self.renderer = Renderer(opt.device)
+        self.renderer = Renderer(opt.device, image_width=image_width, image_height=image_height)
         self.refiner = MeshRefinementModel(opt).to(self.device)
 
         if load_model:
@@ -45,9 +45,9 @@ class FaceModel(nn.Module):
 
         self.geo_mean = torch.from_numpy(self.mat_data['geo_mean']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
         self.tex_mean = torch.from_numpy(self.mat_data['tex_mean']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
-        self.id_base = torch.from_numpy(self.mat_data['id_base']).unsqueeze(0).to(self.device)
+        self.id_base = torch.from_numpy(self.mat_data['id_base']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
         self.exp_base = torch.from_numpy(self.mat_data['exp_base']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
-        self.tex_base = torch.from_numpy(self.mat_data['tex_base']).unsqueeze(0).to(self.device)
+        self.tex_base = torch.from_numpy(self.mat_data['tex_base']).unsqueeze(0).expand(self.batch_size, -1, -1).to(self.device)
 
         self.landmark_index = torch.tensor([
             27440, 27208, 27608, 27816, 35472, 34766, 34312, 34022, 33838, 33654,

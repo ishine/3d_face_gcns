@@ -77,5 +77,5 @@ class mouth_retrieval():
         src_LBP = self.calculate_LBP(crop_lip_image_path, h)
         expr_cost = (self.tgt_expressions - expression).pow(2).sum(dim=0).cpu()
         LBP_cost = self.chi_square_distance(src_LBP)
-        index = (4 * expr_cost + LBP_cost).argmin()
+        index = (3 * expr_cost + LBP_cost).argmin()
         return index

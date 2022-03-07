@@ -24,7 +24,7 @@ if __name__ == '__main__':
 
     for i in tqdm(range(len(foregrounds))):
         # idx = i % (opt.offset_end - opt.offset_start ) + opt.offset_start
-        idx = i
+        idx = i % len(backgrounds)
         fg = cv2.imread(foregrounds[i])
         bg = cv2.imread(backgrounds[idx])
         empty_img = np.zeros((H, W, 3), np.uint8)

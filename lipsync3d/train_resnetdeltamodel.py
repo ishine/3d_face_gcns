@@ -40,7 +40,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam([{'params': model.fc.parameters()}, {'params': model.pretrained_model.parameters()}], lr=opt.lr, betas=(0.5, 0.999))
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_step, gamma=opt.lr_decay)
     criterionMedia = WeightedMSELoss(opt)
-    criterionDelta = networks.CoefficientRegularization(use_mean=True)
+    criterionDelta = networks.CoefficientRegularization(mode='mean')
 
     total_iters = 0
     for epoch in range(opt.num_epoch):

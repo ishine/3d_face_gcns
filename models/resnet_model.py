@@ -33,7 +33,7 @@ class ResnetModel:
         if self.isTrain:
             # define loss functions
             self.criterionPhotometric = networks.PhotometricLoss() if self.opt.lambda_photo > 0.0 else None
-            self.criterionLandmark = networks.LandmarkLoss(opt) if self.opt.lambda_land > 0.0 else None
+            self.criterionLandmark = networks.LandmarkLoss(self.device) if self.opt.lambda_land > 0.0 else None
             self.regularizationAlpha = networks.CoefficientRegularization()
             self.regularizationBeta = networks.CoefficientRegularization()
             self.regularizationDelta = networks.CoefficientRegularization()

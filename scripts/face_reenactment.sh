@@ -6,20 +6,20 @@ set -ex
 # tgt_video_dir : path for training video
 # src_video_dir : path for driving video
 
-target_dir="data/target"
-source_dir="data/source"
-tgt_video_dir=$target_dir/target.mp4
-src_video_dir=$source_dir/source.mp4
+target_dir="data/hwang"
+source_dir="data/hwang"
+tgt_video_dir=$target_dir/KKJ04_5min.mp4
+src_video_dir=$source_dir/KKJ04_5min.mp4
 
 
-mkdir -p $target_dir/full
-mkdir -p $target_dir/crop
-mkdir -p $target_dir/audio
+# mkdir -p $target_dir/full
+# mkdir -p $target_dir/crop
+# mkdir -p $target_dir/audio
 
-mkdir -p $source_dir/full
-mkdir -p $source_dir/crop
-mkdir -p $source_dir/audio
-mkdir -p $source_dir/results
+# mkdir -p $source_dir/full
+# mkdir -p $source_dir/crop
+# mkdir -p $source_dir/audio
+# mkdir -p $source_dir/results
 
 # 1. Take all frames and audio of target and source data
 # ffmpeg -hide_banner -y -i $tgt_video_dir -r 25 $target_dir/full/%05d.png
@@ -49,7 +49,7 @@ mkdir -p $source_dir/results
 
 # python train.py \
 #     --data_dir $target_dir \
-#     --num_epoch 30 \
+#     --num_epoch 40 \
 #     --serial_batches False \
 #     --display_freq 200 \
 #     --print_freq 200 \
@@ -57,15 +57,8 @@ mkdir -p $source_dir/results
 #     --epoch_tex 10 \
 #     --epoch_warm_up 20
 
-# python train.py \
-#     --data_dir $source_dir \
-#     --num_epoch 30 \
-#     --serial_batches False \
-#     --display_freq 200 \
-#     --print_freq 200 \
-#     --batch_size 5 \
-#     --epoch_tex 10 \
-#     --epoch_warm_up 20
+# python expression_extract.py \
+#     --data_dir $source_dir
 
 
 # 4. build neural face renderer data pair
@@ -88,42 +81,42 @@ mkdir -p $source_dir/results
 
 
 # 6. Reenact and create input images of neural renderer for inference
-# python reenact.py --src_dir $source_dir --tgt_dir $target_dir
+python reenact.py --src_dir $source_dir --tgt_dir $target_dir
 
 # choose best epoch with lowest loss
-# epoch=100
+epoch=100
 
 # 7. neural rendering the reenact face sequence
-# python vendor/neural_face_renderer/test.py --model test \
-#     --netG unet_256 \
-#     --direction BtoA \
-#     --dataset_mode exemplar_test \
-#     --norm batch \
-#     --input_nc 42 \
-#     --Nw 7 \
-#     --preprocess none \
-#     --eval \
-#     --use_refine \
-#     --name nfr \
-#     --checkpoints_dir $target_dir/ckpts \
-#     --dataroot $source_dir \
-#     --results_dir $source_dir \
-#     --epoch $epoch
+python vendor/neural_face_renderer/test.py --model test \
+    --netG unet_256 \
+    --direction BtoA \
+    --dataset_mode exemplar_test \
+    --norm batch \
+    --input_nc 42 \
+    --Nw 7 \
+    --preprocess none \
+    --eval \
+    --use_refine \
+    --name nfr \
+    --checkpoints_dir $target_dir/ckpts \
+    --dataroot $source_dir \
+    --results_dir $source_dir \
+    --epoch $epoch
 
 
 # 8. composite lower face back to original video
-# python comp.py --src_dir $source_dir --tgt_dir $target_dir
+python comp.py --src_dir $source_dir --tgt_dir $target_dir
 
 # create final result
 
 # ------ commands for making video using image files ------
 # ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $target_dir/full/%05d_real.png \
 #     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+#     -thread_queue_size 8192 -i $source_dir/reenact_landmarks/%05d.png \
 #     -i $source_dir/audio/audio.wav \
-#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/reenactment_test.mp4
+#     -filter_complex hstack=inputs=2 -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p $source_dir/results/comp_landmark_test.mp4
 
-# ffmpeg -y -loglevel warning \
-#     -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
-#     -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
-#     -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_test.mp4
+ffmpeg -y -loglevel warning \
+    -thread_queue_size 8192 -i $source_dir/audio/audio.wav \
+    -thread_queue_size 8192 -i $source_dir/comp/%05d.png \
+    -vcodec libx264 -preset slower -profile:v high -crf 18 -pix_fmt yuv420p -shortest $source_dir/results/comp_self_reenact_test.mp4

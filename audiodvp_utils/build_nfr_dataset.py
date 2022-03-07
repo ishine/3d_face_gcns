@@ -65,7 +65,7 @@ if __name__ == '__main__':
     masks = get_file_list(os.path.join(opt.data_dir, 'mask'))
     renders = get_file_list(os.path.join(opt.data_dir, 'render'))
 
-    for i in tqdm(range(len(full_image_list))):
+    for i in tqdm(range(len(alpha_list))):
         mask = cv2.imread(masks[i]) / 255.0
         render = cv2.imread(renders[i])
         full = cv2.imread(full_image_list[i])

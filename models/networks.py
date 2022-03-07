@@ -182,8 +182,8 @@ class ResnetFaceModelOptimizer(nn.Module):
 
     def forward(self, x, use_refine=True):
         coef = self.fc(self.pretrained_model(x)).unsqueeze(-1)
-        alpha = self.alpha_fc(self.alpha_resnet(self.alpha_beta_input)).unsqueeze(-1)
-        beta = self.beta_fc(self.beta_resnet(self.alpha_beta_input)).unsqueeze(-1)
+        alpha = self.alpha_fc(self.alpha_resnet(self.alpha_beta_input)).unsqueeze(-1).expand(self.opt.batch_size, -1, -1)
+        beta = self.beta_fc(self.beta_resnet(self.alpha_beta_input)).unsqueeze(-1).expand(self.opt.batch_size, -1, -1)
         
         delta = coef[:, 0:64]
         rotation = coef[:, 91:94]
@@ -197,32 +197,42 @@ class ResnetFaceModelOptimizer(nn.Module):
 
 
 class CoefficientRegularization(nn.Module):
-    def __init__(self, use_mean=False):
+    def __init__(self, mode='mean'):
         super(CoefficientRegularization, self).__init__()
-        self.use_mean = use_mean
+        self.mode = mode
     def forward(self, input):
-        if self.use_mean:
+        if self.mode == 'mean':
             output = torch.sum(torch.mean(input**2, dim=0))
-        else:
+        elif self.mode == 'sum':
             output = torch.sum(input**2)
+        elif self.mode == 'None':
+            output = input
         return output
 
 
 class PhotometricLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, mode='mean'):
         super(PhotometricLoss, self).__init__()
-        self.mse = torch.nn.MSELoss()
+        self.mode = mode
 
     def forward(self, input, target):
-        return self.mse(input, target)
+        photo_loss = (input - target) ** 2
+        if self.mode == 'mean':
+            photo_loss = torch.mean(photo_loss)
+        elif self.mode == 'sum':
+            photo_loss = torch.sum(photo_loss)
+        elif self.mode == 'None':
+            photo_loss = input - target
+        
+        return photo_loss
 
 
 class LandmarkLoss(nn.Module):
-    def __init__(self, opt, use_mean=False):
+    def __init__(self, device, mode='sum'):
         super(LandmarkLoss, self).__init__()
 
-        self.device = opt.device
-        self.use_mean = use_mean
+        self.device = device
+        self.mode = mode
         self.landmark_weight = torch.tensor([[
                 1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
                 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,
@@ -233,10 +243,12 @@ class LandmarkLoss(nn.Module):
     def forward(self, landmark, landmark_gt):
         landmark_loss = (landmark - landmark_gt) ** 2
         
-        if self.use_mean:
+        if self.mode == 'mean':
             landmark_loss = torch.mean(self.landmark_weight * landmark_loss)
-        else:
+        elif self.mode == 'sum':
             landmark_loss = torch.sum(self.landmark_weight * landmark_loss) / 68.0
+        elif self.mode == 'None':
+            landmark_loss = ((1 / 68.0)**(1/2)) * (landmark - landmark_gt) 
 
         return landmark_loss
 
